@@ -104,7 +104,7 @@ GainLog は、日々の筋力トレーニング（種目・重量・回数・セ
 ## 6. 非機能要件
 
 ### 技術スタック
-- **Backend**: TypeScript, Hono, Zod, OpenAPI, Valibot, Vitest
+- **Backend**: TypeScript, Hono, Zod, OpenAPI, Valibot, Vitest, Drizzle ORM
 - **Frontend**: TypeScript, React, TailwindCSS, Valibot, Vitest, Storybook
 - **DB**: Cloudflare D1（SQLite 互換）
 
