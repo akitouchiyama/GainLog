@@ -86,13 +86,13 @@ sequenceDiagram
 - マイグレーションファイルは開発者がローカルで `drizzle-kit generate` により生成し、リポジトリにコミットする。CI/CD 側では生成済みのマイグレーションファイルを `wrangler d1 migrations apply` で適用するのみとし、CI 上でのファイル生成は行わない（手動適用は行わない）。
 - マイグレーションは CI/CD のデプロイフロー内で `wrangler deploy` に先立って自動適用する。この順序上、マイグレーション適用後に `wrangler deploy` が失敗すると、旧バージョンの Worker が新しいスキーマに接続する状態が生じ得る。そのため、スキーマ変更は旧 Worker からも問題なくアクセスできる後方互換な変更（カラム追加など）に限定し、破壊的変更（カラム削除・型変更等）が必要な場合は複数回のデプロイに分割する。
 - `wrangler deploy` が失敗した場合、マイグレーション自体は成功しているため DB のロールバックは行わず、CI を再実行して `wrangler deploy` のみを再試行する。
-- テーブルスキーマの詳細設計は `db.md` で定める。
+- テーブルスキーマは `db.md` で定める。
 
 ## 8. シークレット管理
 
 - Google OAuth の Client ID / Secret など機密情報は、Wrangler Secrets（`wrangler secret put`）で管理し、リポジトリにはコミットしない。
 - GitHub Actions からのデプロイ時は、GitHub Secrets に登録した値を CI 上で Wrangler 経由で設定する。
-- allowlist の具体的な保持形式や、認証フローの詳細設計は `auth.md` で定める（本設計書では触れない）。
+- allowlist の具体的な保持形式や、認証フローの詳細は `auth.md` で定める（本設計書では触れない）。
 
 ## 9. スコープ外
 

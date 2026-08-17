@@ -2,7 +2,7 @@
 
 ## 1. 概要
 
-本書は、要件定義書（`docs/Requirements/requirement.md`）5.6 章で定義された Google OAuth 2.0 / OIDC 認証・allowlist 方式の詳細設計を定めるものである。また、システム構成・アーキテクチャ設計書（`docs/Design/architecture.md`）8 章「シークレット管理」・9 章「スコープ外」から、認証フローの詳細および allowlist の保持形式を定める文書として参照されている。
+本書は、要件定義書（`docs/Requirements/requirement.md`）5.6 章で定義された Google OAuth 2.0 / OIDC 認証・allowlist 方式の設計を定めるものである。また、システム構成・アーキテクチャ設計書（`docs/Design/Basic/architecture.md`）8 章「シークレット管理」・9 章「スコープ外」から、認証フローの詳細および allowlist の保持形式を定める文書として参照されている。
 
 対象読者は開発者本人（実装者）であり、実装時にそのまま参照できる粒度で記述する。
 
@@ -234,7 +234,7 @@ CSRFトークン（Synchronizer Token等）を導入しない理由：BFF構成�
 ## 12. スコープ外
 
 - 画面設計・エラー画面のUI詳細は `screens.md`（未作成）で定める。
-- `users`・`sessions`・`allowlist`テーブルの詳細スキーマ（型・インデックス・マイグレーション）は `db.md`（未作成）で定める。
+- `users`・`sessions`・`allowlist`テーブルのスキーマ（型・制約・インデックス）は `docs/Design/Basic/db.md` で定める。マイグレーションファイルの具体的な配置・命名規則は詳細設計フェーズで定める。
 - Google Cloud Console側でのOAuthクライアント設定手順（Authorized redirect URI登録等）は運用手順書スコープとし、本書では触れない。
 - allowlistのGUI管理機能（Phase 2）は要件定義書5.12で管理し、本書はPhase 1の手動運用のみを対象とする。
 - 複数ユーザー化を見据えた権限モデル（管理者ロール等）の詳細設計は本書のスコープ外とする。
