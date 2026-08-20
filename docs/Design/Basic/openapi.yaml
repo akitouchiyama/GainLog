@@ -1,0 +1,604 @@
+openapi: 3.1.0
+info:
+  title: GainLog API
+  version: "1.0.0"
+  description: >
+    GainLog（個人向け筋トレ記録アプリ）のバックエンドAPI設計書。
+    本書は要件定義書（docs/Requirements/requirement.md）・DB設計書（db.md）・
+    画面設計書（screens.md）・認証設計書（auth.md）を基にした手書きのAPI設計であり、
+    実装フェーズで @hono/zod-openapi を用いてHono側のルート定義（Zodスキーマ）へ
+    手動でコード化する想定の設計ソースである（自動生成コードではない）。
+
+    対象は要件定義書4章のPhase 1のみ。Phase 2機能（成長グラフ・目標設定・
+    メニュー・allowlist管理画面）のエンドポイントは対象外とする。
+
+    認証系エンドポイントのうち、ブラウザの通常ナビゲーションで完結し
+    JSON応答を返さない `GET /api/auth/login` ・ `GET /api/auth/callback` は
+    本書の対象外とする（auth.md 3章参照）。JSON APIとして呼ばれる
+    `/api/auth/me` ・ `/api/auth/logout` のみを記載する。
+
+    全エンドポイントは認証必須（Cookieセッション。auth.md 2章参照）であり、
+    未認証時は一律 401 を返す。他ユーザー所有リソースへのアクセスは
+    存在有無を漏らさないため 404 を返す（auth.md 8章）。
+
+servers:
+  - url: /api
+    description: 同一オリジン構成のため相対パス（architecture.md 3章）
+
+security:
+  - sessionCookie: []
+
+tags:
+  - name: auth
+    description: 認証状態の取得・ログアウト（JSON APIのみ。auth.md参照）
+  - name: exercises
+    description: 種目管理
+  - name: records
+    description: 記録（日単位・種目単位・セット単位のCRUD）
+  - name: personal-best
+    description: 自己ベスト（最高記録）表示
+
+paths:
+  /auth/me:
+    get:
+      tags: [auth]
+      summary: ログイン状態・ユーザー情報の取得
+      description: SPA起動時に呼び出し、ログイン状態と現在のユーザー情報を取得する。
+      responses:
+        "200":
+          description: ログイン中
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /auth/logout:
+    post:
+      tags: [auth]
+      summary: ログアウト（セッション破棄）
+      description: >
+        Cookieのトークンに対応するsessionsテーブルの行を削除し、
+        セッションCookieを失効させる。冪等であり、セッションが
+        既に存在しない・期限切れの場合も成功として扱う（auth.md 7章）。
+      responses:
+        "204":
+          description: ログアウト成功（冪等）
+
+  /exercises:
+    get:
+      tags: [exercises]
+      summary: 種目一覧取得
+      description: 事前定義種目とログインユーザーが追加した種目をあわせて返す。
+      responses:
+        "200":
+          description: 種目一覧
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Exercise"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    post:
+      tags: [exercises]
+      summary: 種目の追加
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ExerciseInput"
+      responses:
+        "201":
+          description: 作成された種目
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Exercise"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /exercises/{exerciseId}:
+    parameters:
+      - $ref: "#/components/parameters/ExerciseId"
+    patch:
+      tags: [exercises]
+      summary: 種目の編集
+      description: >
+        ユーザーが追加した種目のみ編集可能（requirement.md 5.5）。
+        事前定義種目（owner_user_idがnull）を編集しようとした場合は403を返す。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ExerciseInput"
+      responses:
+        "200":
+          description: 更新後の種目
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Exercise"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: 事前定義種目は編集できない
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      tags: [exercises]
+      summary: 種目の削除
+      description: >
+        ユーザーが追加した種目のみ削除可能。事前定義種目は403、
+        既に記録（workout_sets）で使用中の種目は409を返す
+        （db.md `ON DELETE RESTRICT` 制約に対応。requirement.md 5.5）。
+      responses:
+        "204":
+          description: 削除成功
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: 事前定義種目は削除できない
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: 使用中のため削除できない
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /exercises/{exerciseId}/best-set:
+    parameters:
+      - $ref: "#/components/parameters/ExerciseId"
+    get:
+      tags: [personal-best]
+      summary: 自己ベスト（最高記録）の取得
+      description: >
+        指定種目について、weight_deciが最大となるセットを持つ日を特定し、
+        その日にその種目で行った全セットを返す（requirement.md 5.2）。
+        対象は編集中の記録自身を除く全期間（未来日を含む）。
+        該当する記録が一つも存在しない場合は `found: false` を返す（200）。
+      parameters:
+        - name: excludeDate
+          in: query
+          required: false
+          description: 除外する記録日（編集中の記録自身を集計対象から除くため）
+          schema:
+            type: string
+            format: date
+            example: "2026-08-20"
+      responses:
+        "200":
+          description: 自己ベスト（存在しない場合は found:false）
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PersonalBestRecord"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /records:
+    get:
+      tags: [records]
+      summary: 日付範囲での記録サマリ取得（カレンダー・週間一覧共用）
+      description: >
+        月間カレンダー画面（screens.md 5.3）・週間一覧画面（screens.md 5.4）の
+        両方で利用する。日付範囲内の各日について、記録の有無・種目数を返す。
+        カレンダー側は `exerciseCount > 0` を記録有無の判定に使う。
+      parameters:
+        - name: from
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+        - name: to
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+      responses:
+        "200":
+          description: 日付範囲サマリ
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/RecordSummary"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /records/{date}:
+    parameters:
+      - $ref: "#/components/parameters/RecordDate"
+    get:
+      tags: [records]
+      summary: 指定日の記録取得
+      description: >
+        指定日の種目・セット一覧を返す。記録が存在しない日でも404ではなく
+        `exercises: []` の200を返す（新規作成フォームとして機能させるため。
+        screens.md 5.5）。
+      responses:
+        "200":
+          description: 指定日の記録（記録がない場合は exercises が空配列）
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkoutRecord"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    delete:
+      tags: [records]
+      summary: 日単位の記録削除
+      description: 指定日の記録（種目・セット全て）を削除する（requirement.md 5.1）。
+      responses:
+        "204":
+          description: 削除成功
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /records/{date}/exercises:
+    parameters:
+      - $ref: "#/components/parameters/RecordDate"
+    post:
+      tags: [records]
+      summary: 種目ブロックの追加
+      description: >
+        指定日の記録に種目とその初期セット群を追加する。当該日の記録
+        （workout_records）が存在しない場合は新規作成する。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AddExerciseInput"
+      responses:
+        "201":
+          description: 追加された種目ブロック
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkoutRecordExercise"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /records/{date}/exercises/{exerciseId}:
+    parameters:
+      - $ref: "#/components/parameters/RecordDate"
+      - $ref: "#/components/parameters/ExerciseId"
+    delete:
+      tags: [records]
+      summary: 種目単位の削除
+      description: >
+        指定日・指定種目の全セットを削除する（requirement.md 5.1）。
+        削除の結果、記録内のセットが0件になった場合、
+        workout_record自体もDBトリガーにより自動的に削除される（db.md 7章）。
+      responses:
+        "204":
+          description: 削除成功
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /records/{date}/exercises/{exerciseId}/sets:
+    parameters:
+      - $ref: "#/components/parameters/RecordDate"
+      - $ref: "#/components/parameters/ExerciseId"
+    post:
+      tags: [records]
+      summary: セットの追加
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WorkoutSetInput"
+      responses:
+        "201":
+          description: 追加されたセット
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkoutSet"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: 同一記録・同一種目内でset_numberが重複している
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /records/{date}/sets/{setId}:
+    parameters:
+      - $ref: "#/components/parameters/RecordDate"
+      - name: setId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    patch:
+      tags: [records]
+      summary: セットの編集
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WorkoutSetInput"
+      responses:
+        "200":
+          description: 更新後のセット
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkoutSet"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: 変更後のset_numberが同一記録・同一種目内で重複している
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    delete:
+      tags: [records]
+      summary: セット単位の削除
+      description: >
+        削除の結果、記録内のセットが0件になった場合、workout_record自体も
+        DBトリガーにより自動的に削除される（db.md 7章）。
+      responses:
+        "204":
+          description: 削除成功
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: __Host-session
+      description: BFF方式のサーバーサイドセッションCookie（auth.md 6章）
+
+  parameters:
+    ExerciseId:
+      name: exerciseId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    RecordDate:
+      name: date
+      in: path
+      required: true
+      description: 対象日（YYYY-MM-DD、JST基準の暦日。requirement.md 非機能要件）
+      schema:
+        type: string
+        format: date
+        example: "2026-08-20"
+
+  responses:
+    Unauthorized:
+      description: 未認証（Cookieなし・期限切れ）
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    NotFound:
+      description: 対象が存在しない、または他ユーザーが所有するリソースである（auth.md 8章）
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    ValidationError:
+      description: リクエストの形式・制約違反
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+
+  schemas:
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          description: >
+            機械判定用のエラーコード（例: validation_error, not_found,
+            forbidden, conflict）。詳細な形式はnon-functional.mdで定める。
+        message:
+          type: string
+          description: 人間可読なエラーメッセージ
+
+    User:
+      type: object
+      required: [id, email]
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+
+    ExerciseCategory:
+      type: string
+      enum:
+        - chest
+        - back
+        - legs
+        - shoulders
+        - arms
+        - core
+        - cardio
+        - other
+
+    ExerciseInput:
+      type: object
+      required: [name, category]
+      properties:
+        name:
+          type: string
+          minLength: 1
+        category:
+          $ref: "#/components/schemas/ExerciseCategory"
+
+    Exercise:
+      type: object
+      required: [id, name, category, isPredefined, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        category:
+          $ref: "#/components/schemas/ExerciseCategory"
+        isPredefined:
+          type: boolean
+          description: trueの場合、owner_user_idがnullの事前定義種目（編集・削除不可）
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    WorkoutSetInput:
+      type: object
+      required: [setNumber, weightDeci, reps]
+      properties:
+        setNumber:
+          type: integer
+          minimum: 1
+          description: セット番号（1以上の正整数。requirement.md 5.1）
+        weightDeci:
+          type: integer
+          minimum: 0
+          maximum: 9999
+          description: 重量（0.1kg単位。0〜999.9kgに対応。db.md 5.6）
+        reps:
+          type: integer
+          minimum: 1
+          description: 回数（1以上の正整数、上限なし）
+
+    WorkoutSet:
+      allOf:
+        - type: object
+          required: [id]
+          properties:
+            id:
+              type: string
+              format: uuid
+        - $ref: "#/components/schemas/WorkoutSetInput"
+
+    AddExerciseInput:
+      type: object
+      required: [exerciseId, sets]
+      properties:
+        exerciseId:
+          type: string
+          format: uuid
+        sets:
+          type: array
+          minItems: 1
+          items:
+            $ref: "#/components/schemas/WorkoutSetInput"
+
+    WorkoutRecordExercise:
+      type: object
+      required: [exerciseId, exerciseName, sets]
+      properties:
+        exerciseId:
+          type: string
+          format: uuid
+        exerciseName:
+          type: string
+        sets:
+          type: array
+          items:
+            $ref: "#/components/schemas/WorkoutSet"
+
+    WorkoutRecord:
+      type: object
+      required: [date, exercises]
+      properties:
+        date:
+          type: string
+          format: date
+        exercises:
+          type: array
+          items:
+            $ref: "#/components/schemas/WorkoutRecordExercise"
+
+    RecordSummary:
+      type: object
+      required: [date, exerciseCount]
+      properties:
+        date:
+          type: string
+          format: date
+        exerciseCount:
+          type: integer
+          minimum: 0
+          description: その日に記録した種目数（0の場合、記録なしとして扱う）
+
+    PersonalBestRecord:
+      type: object
+      required: [found]
+      properties:
+        found:
+          type: boolean
+        workoutDate:
+          type: string
+          format: date
+          description: 自己ベストを記録した日（found=trueの場合のみ）
+        sets:
+          type: array
+          description: >
+            自己ベストを記録した日の、その種目の全セット
+            （found=trueの場合のみ。重量・回数・セット番号を含む）
+          items:
+            $ref: "#/components/schemas/WorkoutSet"
