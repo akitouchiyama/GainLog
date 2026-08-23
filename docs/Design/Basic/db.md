@@ -311,9 +311,9 @@ SQLite（D1）は `PRIMARY KEY` / `UNIQUE` 制約には自動的にインデッ�
 | `exercises` | `(owner_user_id, name)` | UNIQUE（制約により自動） | 種目一覧取得（`owner_user_id IS NULL OR owner_user_id = ?`）の高速化を兼ねる |
 | `workout_records` | `(user_id, workout_date)` | UNIQUE（制約により自動） | 日付指定取得・月間カレンダー/週間一覧の期間検索（`WHERE user_id=? AND workout_date BETWEEN ? AND ?`）を兼ねる |
 | `workout_sets` | `(workout_record_id, exercise_id, set_number)` | UNIQUE（制約により自動） | 記録内のセット一覧取得（`workout_record_id`が先頭列のため単独検索にも有効） |
-| `workout_sets` | `exercise_id` | 通常インデックス（明示的に作成） | ①種目削除時のRESTRICT判定（使用中チェック）、②「前回記録重量」検索（同一種目・同一セット番号の直近記録）のJOIN高速化に必要。上記UNIQUEインデックスは`workout_record_id`が先頭列のため`exercise_id`単独検索には効かない |
+| `workout_sets` | `exercise_id` | 通常インデックス（明示的に作成） | ①種目削除時のRESTRICT判定（使用中チェック）、②「自己ベスト（最高記録）」検索（同一種目内での`MAX(weight_deci)`集計）のJOIN高速化に必要。上記UNIQUEインデックスは`workout_record_id`が先頭列のため`exercise_id`単独検索には効かない |
 
-「前回記録重量」（requirement.md 5.2）の検索は `workout_sets.exercise_id` と `workout_records.(user_id, workout_date)` の2つのインデックスを跨いだJOINになる想定であり、両方の整備が性能上重要となる。
+「自己ベスト（最高記録）」（requirement.md 5.2）の検索は2段階になる想定である。①`workout_sets.exercise_id`（および所有者チェックのための`workout_records.user_id`とのJOIN）をキーに`MAX(weight_deci)`を求め、該当セットが属する`workout_record_id`を特定する（日付範囲での絞り込みが不要になった分、旧・前回記録重量方式で重要だった`workout_records.(user_id, workout_date)`側インデックスへの依存度は下がる）。②特定した`workout_record_id`と`exercise_id`で当日の全セットを取得する（`(workout_record_id, exercise_id, set_number)`のUNIQUEインデックスで対応可能）。
 
 ## 9. スコープ外
 
