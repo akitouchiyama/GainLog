@@ -233,7 +233,7 @@ CSRFトークン（Synchronizer Token等）を導入しない理由：BFF構成�
 
 ## 12. スコープ外
 
-- 画面設計・エラー画面のUI詳細は `screens.md`（未作成）で定める。
+- 画面設計・エラー画面のUI詳細は `screens.md` で定める。
 - `users`・`sessions`・`allowlist`テーブルのスキーマ（型・制約・インデックス）は `docs/Design/Basic/db.md` で定める。マイグレーションファイルの具体的な配置・命名規則は詳細設計フェーズで定める。
 - Google Cloud Console側でのOAuthクライアント設定手順（Authorized redirect URI登録等）は運用手順書スコープとし、本書では触れない。
 - allowlistのGUI管理機能（Phase 2）は要件定義書5.12で管理し、本書はPhase 1の手動運用のみを対象とする。
