@@ -315,6 +315,33 @@ SQLite（D1）は `PRIMARY KEY` / `UNIQUE` 制約には自動的にインデッ�
 
 「自己ベスト（最高記録）」（requirement.md 5.2）の検索は2段階になる想定である。①`workout_sets.exercise_id`（および所有者チェックのための`workout_records.user_id`とのJOIN）をキーに`MAX(weight_deci)`を求め、該当セットが属する`workout_record_id`を特定する（日付範囲での絞り込みが不要になった分、旧・前回記録重量方式で重要だった`workout_records.(user_id, workout_date)`側インデックスへの依存度は下がる）。②特定した`workout_record_id`と`exercise_id`で当日の全セットを取得する（`(workout_record_id, exercise_id, set_number)`のUNIQUEインデックスで対応可能）。
 
+### 自己ベスト抽出SQL（確定）
+
+上記2段階は、相関サブクエリにより1本の`SELECT`で実現できる。
+
+```sql
+SELECT ws.set_number, ws.weight_deci, ws.reps
+FROM workout_sets ws
+JOIN workout_records wr ON ws.workout_record_id = wr.id
+WHERE wr.user_id = :userId
+  AND ws.exercise_id = :exerciseId
+  AND wr.id != :excludeRecordId  -- 表示・編集対象の記録自身を集計対象から除く（requirement.md 5.2、excludeDateに対応するworkout_record_id）
+  AND wr.workout_date = (
+    SELECT wr2.workout_date
+    FROM workout_sets ws2
+    JOIN workout_records wr2 ON ws2.workout_record_id = wr2.id
+    WHERE wr2.user_id = :userId
+      AND ws2.exercise_id = :exerciseId
+      AND wr2.id != :excludeRecordId
+    ORDER BY ws2.weight_deci DESC, wr2.workout_date DESC
+    LIMIT 1
+  )
+```
+
+- **タイブレークルール（確定）**：同一最大`weight_deci`が複数日にまたがる場合、内側サブクエリの`ORDER BY ws2.weight_deci DESC, wr2.workout_date DESC`により、より新しい`workout_date`を優先する。requirement.md 5.2で「実装時に定める」とされていた事項はこれにより確定する。
+- `excludeRecordId`は、APIリクエストの`excludeDate`（openapi.yaml `/exercises/{exerciseId}/best-set`）を、対象ユーザー・当該日付の`workout_records.id`に変換した値を渡す想定とする（`excludeDate`に該当する記録が存在しない＝新規作成時は、除外条件自体が不要になるため`AND wr.id != :excludeRecordId`の句を省略する）。
+- 該当行が1件も存在しない場合（`found: false`相当）は、内側サブクエリが`NULL`を返し外側の`WHERE`が恒偽となるため、外側`SELECT`は0件となる。この0件を「記録が一つもない」の判定に用いる。
+
 ## 9. スコープ外
 
 以下は本設計書の対象外とする。
