@@ -203,6 +203,7 @@ CSRFトークン（Synchronizer Token等）を導入しない理由：BFF構成�
 | state不一致・一時Cookie欠落 | ログインフロー（ナビゲーション） | 302でフロントエンドのログイン画面へ（例：`/login?error=invalid_request`） |
 | ID token検証失敗 | ログインフロー（ナビゲーション） | 302で`/login?error=invalid_token` |
 | allowlist外 | ログインフロー（ナビゲーション） | 302で`/login?error=not_allowed`（具体的な理由はレスポンスに含めない） |
+| Google API呼び出し自体の失敗（token endpoint通信エラー・JWKS取得失敗等） | ログインフロー（ナビゲーション） | 302で`/login?error=invalid_request`（実質1人〜数人規模の低頻度利用のため自動リトライは行わず、失敗時は再ログインを促す。`docs/Design/Basic/common-spec.md` 7章参照） |
 | 未認証（Cookieなし・期限切れ） | JSON API | `401 Unauthorized` |
 | 他ユーザー所有リソースへのアクセス | JSON API | `404 Not Found`（8章参照） |
 | バリデーションエラー等 | JSON API | 認証・認可起因以外は本書のスコープ外 |

@@ -185,3 +185,4 @@ GainLog は、日々の筋力トレーニング（種目・重量・回数・セ
 
 - DB に Cloudflare D1（SQLite 互換）を採用するため、PostgreSQL 固有の機能（JSONB、高度な拡張機能等）は利用できない。将来的にそれらが必要になった場合は、Cloudflare Workers を維持したまま Neon（Serverless PostgreSQL）へ移行する選択肢がある。
 - Phase 2 の重量アップ促進機能における判定ロジックの詳細は未定。Phase 2 着手時に検討する。
+- 複数ユーザー対応（Phase 2、5.12 参照）により利用規模が「実質 1 人〜数人」の前提から拡大する場合、セキュリティ（レート制限・DoS/DDoS 対策等）・パフォーマンス（レスポンス速度）・負荷耐性など、6 章で定めた非機能要件を現在の前提に基づく設計から見直す必要がある。特にレート制限・DoS/DDoS 対策・外部API（Google OAuth）呼び出し失敗時のリトライ方針は、Phase 1 時点では低トラフィック利用のため対象外としている（`docs/Design/Basic/common-spec.md` 7 章参照）が、Phase 2 着手時に再検討が必要になる。

@@ -445,12 +445,34 @@ components:
       properties:
         code:
           type: string
+          enum:
+            - validation_error
+            - unauthorized
+            - forbidden
+            - not_found
+            - conflict
+            - internal_error
           description: >
-            機械判定用のエラーコード（例: validation_error, not_found,
-            forbidden, conflict）。詳細な形式はnon-functional.mdで定める。
+            機械判定用のエラーコード。HTTPステータスコードと1対1で対応する
+            （common-spec.md 2章参照）。
         message:
           type: string
           description: 人間可読なエラーメッセージ
+        fields:
+          type: array
+          description: >
+            フィールド単位のエラー詳細（code=validation_errorの場合のみ付与。
+            common-spec.md 3章参照）。
+          items:
+            type: object
+            required: [field, message]
+            properties:
+              field:
+                type: string
+                description: エラーが発生した入力フィールド名（camelCase）
+              message:
+                type: string
+                description: 当該フィールドのエラーメッセージ
 
     User:
       type: object
