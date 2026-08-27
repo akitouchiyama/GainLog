@@ -454,7 +454,7 @@ components:
             - internal_error
           description: >
             機械判定用のエラーコード。HTTPステータスコードと1対1で対応する
-            （non-functional.md 2章参照）。
+            （common-spec.md 2章参照）。
         message:
           type: string
           description: 人間可読なエラーメッセージ
@@ -462,7 +462,7 @@ components:
           type: array
           description: >
             フィールド単位のエラー詳細（code=validation_errorの場合のみ付与。
-            non-functional.md 3章参照）。
+            common-spec.md 3章参照）。
           items:
             type: object
             required: [field, message]
