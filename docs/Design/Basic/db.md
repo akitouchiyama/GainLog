@@ -10,7 +10,7 @@
 
 - DBエンジンは Cloudflare D1（SQLite 互換）であり、ORM・マイグレーションツールとして Drizzle ORM / drizzle-kit を用いる（architecture.md 7章）。
 - 本書のスコープは要件定義書4章で定義された Phase 1 の範囲、すなわち `users` / `sessions` / `allowlist` / `exercises` / `workout_records` / `workout_sets` の6テーブルとする。Phase 2 で追加予定の `menus` 等は本書のスコープ外とする（9章参照）。
-- 外部キー制約は D1（SQLite）上で `PRAGMA foreign_keys = ON` を前提として設計する。有効化のタイミング・方法の実装時検証は10章の未解決事項とする。
+- 外部キー制約は D1 上で常に有効であることを前提として設計する。D1 は素の SQLite と異なり外部キー制約をデフォルトで強制し、クエリやマイグレーションの実行中に `PRAGMA foreign_keys = OFF` へ変更することはできない（D1 は各クエリを暗黙のトランザクションで実行するため）。制約を一時的に違反する必要がある場合（複雑なデータ移行等）は `PRAGMA defer_foreign_keys = ON` でトランザクション終端まで検証を遅延させる。
 - 本書は基本設計（外部設計）レベルのドキュメントであり、リポジトリ層のディレクトリ構成・migrationファイルの具体的配置・Drizzle ORMの実装コードは対象外とする（9章参照）。
 
 ## 2. 命名規則・型設計方針
@@ -46,7 +46,7 @@
 - 物理削除（論理削除は行わない）を採用する。
 - 外部キー制約に `ON DELETE CASCADE` / `ON DELETE RESTRICT` を使い分け、参照整合性をDBエンジンレベルで強制する。詳細は6章「制約・整合性一覧」を参照。
 - 「セットが0件になった際のWorkoutRecord自動削除」（要件定義書5.1）や `updated_at` の自動更新は、FK制約では表現できない／実装漏れが起きやすいため、DBトリガーで実現する。詳細は7章「トリガー定義」を参照。
-- D1（SQLite）は接続ごとに `PRAGMA foreign_keys = ON` を明示的に有効化しない限り外部キー制約が無視される点に注意する（10章の未解決事項を参照）。
+- D1 は外部キー制約をデフォルトで強制するため、`PRAGMA foreign_keys = ON` の明示的な有効化は不要である（1章の前提を参照）。ただしユーザー削除時の CASCADE / RESTRICT の相互作用には注意が必要で、`PRAGMA defer_foreign_keys` は即時評価される `ON DELETE RESTRICT` を遅延できない（10章 未解決事項1を参照）。
 
 ## 3. ER図
 
@@ -202,11 +202,12 @@ Googleアカウントに紐づく内部ユーザー情報。JITプロビジョ�
 |---|---|---|---|---|
 | `id` | TEXT | NOT NULL | PRIMARY KEY | 記録ID（UUID） |
 | `user_id` | TEXT | NOT NULL | FOREIGN KEY → `users.id` ON DELETE CASCADE | 記録の所有ユーザー |
-| `workout_date` | TEXT | NOT NULL | – | 記録日（`YYYY-MM-DD`形式。JST基準の暦日） |
+| `workout_date` | TEXT | NOT NULL | CHECK（`YYYY-MM-DD`形式） | 記録日（`YYYY-MM-DD`形式。JST基準の暦日） |
 | `created_at` | TEXT | NOT NULL | – | 作成日時 |
 | `updated_at` | TEXT | NOT NULL | – | 更新日時（7章のトリガーによりUPDATE時に自動更新） |
 
 - `UNIQUE(user_id, workout_date)` により、ユーザーごとに1日1件の制約をDBレベルで強制する（requirement.md 5.1）。
+- `workout_date` には `CHECK (workout_date GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]')` を設定し、`YYYY-MM-DD` 形式以外の値が直接 SQL・シード・将来の書き込み経路から混入することを防ぐ。期間検索（`BETWEEN`）や `ORDER BY`、自己ベストのタイブレーク（8章）が文字列としての辞書順に依存するため、形式の逸脱は日付比較の誤りに直結する。なお `GLOB` は桁の値の妥当性（例：月が `13`、日が `32`）までは検証しないため、暦日として正しいかのチェックはアプリケーション層のバリデーションで担保する。
 - セットが0件になった場合の自動削除は7章のトリガー `trg_workout_records_auto_delete` を参照。
 
 ### 5.6 workout_sets
@@ -239,7 +240,8 @@ Googleアカウントに紐づく内部ユーザー情報。JITプロビジョ�
 | `exercises` | UNIQUE | `(owner_user_id, name)`（NULL同士は区別される） | 5.4節 |
 | `exercises` | FK（CASCADE） | `owner_user_id` → `users.id`（nullable） | ユーザー削除時に自作種目も削除 |
 | `workout_records` | UNIQUE | `(user_id, workout_date)` | requirement.md 5.1 |
-| `workout_records` | FK（CASCADE） | `user_id` → `users.id` | ユーザー削除時に記録も削除 |
+| `workout_records` | CHECK | `workout_date` が `YYYY-MM-DD` 形式（`GLOB` パターン） | 本書2章・5.5節 |
+| `workout_records` | FK（CASCADE） | `user_id` → `users.id` | ユーザー削除時に記録も削除（ユーザー削除は Phase 2。10章 未解決事項1） |
 | `workout_sets` | UNIQUE | `(workout_record_id, exercise_id, set_number)` | requirement.md 5.1 |
 | `workout_sets` | FK（CASCADE） | `workout_record_id` → `workout_records.id` | 記録削除（日単位削除）時に配下セットも削除 |
 | `workout_sets` | FK（RESTRICT） | `exercise_id` → `exercises.id` | requirement.md 5.5（使用中種目は削除不可） |
@@ -249,7 +251,7 @@ Googleアカウントに紐づく内部ユーザー情報。JITプロビジョ�
 | （DBトリガー） | ビジネスルール | セット0件時のWorkoutRecord自動削除 | requirement.md 5.1（FK制約では表現不可。7章参照） |
 | （DBトリガー） | 運用ルール | `updated_at` の自動更新 | 7章参照 |
 
-D1（SQLite）でこれらのFK制約を有効にするには、接続時に `PRAGMA foreign_keys = ON` を設定する必要がある（本書1章の前提。10章の未解決事項も参照）。
+D1 はこれらの FK 制約をデフォルトで強制するため、有効化のための追加設定は不要である（本書1章の前提を参照）。
 
 ## 7. トリガー定義
 
@@ -296,7 +298,7 @@ END;
 ```
 
 - `updated_at` 自動更新トリガーは `WHEN NEW.updated_at = OLD.updated_at` により、アプリケーション側が明示的に別の値を渡した場合は上書きしない（無限ループ防止・意図的な値指定を許容する）設計である。
-- `trg_workout_records_auto_delete` は、日単位削除（`workout_records` の直接DELETE）によりFKのCASCADEで `workout_sets` が削除された際にも誘発され、既に削除処理中の親行に対して冗長なDELETEを試みる（実害はないが、10章の検証事項として明記する）。
+- `trg_workout_records_auto_delete` は、日単位削除（`workout_records` の直接DELETE）によりFKのCASCADEで `workout_sets` が削除された際にも誘発され、既に削除処理中の親行に対して冗長なDELETEを試みる（実害はないが、実装時にD1上で挙動を確認する。10章 未解決事項1も参照）。
 - セット単位・種目単位の削除（一部の `workout_sets` のみ削除）の場合は、削除後に残存セットが0件であることを検知して `workout_records` を削除する、本来の意図通りの動作となる。
 
 ## 8. インデックス方針
@@ -352,6 +354,7 @@ WHERE wr.user_id = :userId
 - Phase 2機能（`menus`等）の詳細スキーマ。Phase 2着手時に別途本書を拡張する
 - allowlistのGUI管理機能（Phase 2）のスキーマ変更（要件定義書5.12参照）
 - シードデータ（事前定義種目一覧等）の具体的な内容
+- ユーザー削除機能（`users` 行の削除、およびそれに伴う記録データの一括削除）。Phase 1 では提供しない。緊急のアクセス遮断は allowlist からの削除＋該当 `user_id` の `sessions` 行削除で対応する（`auth.md` 4章）。`user_id` 系 FK の `ON DELETE CASCADE` 定義は Phase 2 のユーザー削除に備えた設計であり、Phase 1 で `DELETE FROM users` を実行する運用は想定しない。CASCADE / RESTRICT の相互作用の詳細は10章 未解決事項1を参照
 
 ## 10. 整合性チェック結果・未解決事項
 
@@ -368,10 +371,9 @@ WHERE wr.user_id = :userId
 | 重量の範囲・刻み | requirement.md 5.1「0〜999.9、0.1kg刻み」 | `weight_deci INTEGER CHECK(0〜9999)` | 整合 |
 | 種目削除の参照整合性 | requirement.md 5.5「使用中の種目は削除できない」 | `exercise_id`をON DELETE RESTRICTに設定 | 整合 |
 | セット0件時のWorkoutRecord自動削除 | requirement.md 5.1 | DBトリガー（7章）で実現 | 整合 |
-| 日付の形式 | requirement.md 非機能要件「日付はISO 8601（YYYY-MM-DD）、JST基準」 | `workout_date TEXT`（YYYY-MM-DD） | 整合（datetime系カラムとの意味の違いに注意。2章参照） |
+| 日付の形式 | requirement.md 非機能要件「日付はISO 8601（YYYY-MM-DD）、JST基準」 | `workout_date TEXT` ＋ `CHECK`（`YYYY-MM-DD` の `GLOB` パターン） | 整合（datetime系カラムとの意味の違いに注意。2章参照） |
 
 ### 未解決事項
 
-1. **D1における`PRAGMA foreign_keys`の有効化方法**：本書はD1上でFK制約が有効であることを前提とするが、D1のデフォルト設定およびDrizzle経由での接続ごとの有効化要否（Workerのリクエストごとに設定が必要か等）は実装時に確認・検証が必要。
-2. **削除順序・トリガー多重発火の実際の挙動**：ユーザー削除時、`workout_records`（CASCADE）→配下の`workout_sets`（CASCADE）が削除される一方、同じユーザーの`exercises`（`owner_user_id`のCASCADE）も削除対象となる。SQLite（D1）が単一の親DELETE文から複数の子テーブルへのCASCADEをどの順序で処理するかは仕様上厳密に規定されていないため、`workout_sets.exercise_id`のON DELETE RESTRICTとの理論上の競合可能性、および7章のトリガーの多重発火・冗長DELETEの実際の挙動を、実装時にD1上で検証する必要がある（想定通り動作しない場合、ユーザー削除処理をアプリケーション層で明示的な削除順序（sets→records、sets参照解消後にexercises）で組む代替案を検討する）。
-3. **トリガーDDLのマイグレーション統合方法**：drizzle-kit生成のマイグレーションファイルへトリガーDDLをどう組み込むか（生SQL手動追記の運用ルール、drizzle-kitの再生成時に上書きされないようにする方法等）は詳細設計フェーズで確定する。
+1. **ユーザー削除時の CASCADE / RESTRICT の相互作用（Phase 2 で確定）**：ユーザー削除は Phase 1 のスコープ外とする（9章「スコープ外」参照）。Phase 2 で実装する際、`users` の削除は `workout_records`（CASCADE）→ 配下の `workout_sets`（CASCADE）を削除する一方、同じユーザーの `exercises`（`owner_user_id` の CASCADE）も削除対象となる。D1（SQLite）が単一の親 DELETE から複数の子テーブルへの CASCADE をどの順序で処理するかは厳密に規定されておらず、`exercises` が先に削除されると `workout_sets.exercise_id` の即時評価 `ON DELETE RESTRICT` に抵触してユーザー削除自体が失敗しうる（`PRAGMA defer_foreign_keys` は即時評価の RESTRICT を遅延できない）。そのため Phase 2 では、ユーザー削除をアプリケーション層で `workout_sets → workout_records → exercises` の明示的な順序で削除するトランザクションとして実装し、D1 上で回帰テストする。7章のトリガーの多重発火・冗長 DELETE の実挙動もこの時点で併せて検証する。
+2. **トリガーDDLのマイグレーション統合方法**：drizzle-kit生成のマイグレーションファイルへトリガーDDLをどう組み込むか（生SQL手動追記の運用ルール、drizzle-kitの再生成時に上書きされないようにする方法等）は詳細設計フェーズで確定する。

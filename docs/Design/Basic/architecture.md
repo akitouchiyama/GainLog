@@ -39,6 +39,12 @@ flowchart LR
     Check -- "No" --> Assets["Static Assets\n（React SPA / index.html フォールバック）"]
 ```
 
+この振り分けを Wrangler（Static Assets）設定で実現するための方針は以下の通り。
+
+- `assets.not_found_handling = "single-page-application"` を設定し、静的アセットに一致しないパス（React Router のクライアントサイドルート等）は `404` ではなく `index.html`（200）へフォールバックさせる。これがないと、React ルートへの直接アクセス・リロードが `404` になる。
+- `run_worker_first` に `/api/*` を指定し、`/api/*` へのリクエストは静的アセットの有無に関わらず必ず Worker（Hono API）で先に処理する。これがないと、将来 `/api/` 配下と同名の静的アセットが生成された場合に API がバイパスされうる。
+- 上記に相当する挙動を Worker 実装（`env.ASSETS.fetch()` の明示呼び出し等）で担保してもよい。具体的な設定ファイル（`wrangler.jsonc` 等）の記述は詳細設計フェーズで定める。
+
 ## 4. 環境構成
 
 - 本番環境（production）のみを設計対象とする。ステージング環境は用意しない。
@@ -77,7 +83,7 @@ sequenceDiagram
 ```
 
 - テスト（Vitest）が失敗した場合はデプロイを中断する。
-- ローカルからの手動デプロイ（`wrangler deploy`）は開発時の動作確認用途として許容するが、正規のリリース経路は上記の CI/CD フローとする。本番環境へのデプロイ権限を持つ Cloudflare API token は GitHub Actions（GitHub Secrets）にのみ保持し、開発者のローカル環境には配布しない。
+- ローカルからの手動デプロイ（`wrangler deploy`）は開発時の動作確認用途として許容するが、正規のリリース経路は上記の CI/CD フローとする。ローカルからのデプロイは `wrangler login`（開発者個人の Cloudflare アカウントによる OAuth 認証）で行い、本番環境へのデプロイ権限を持つ Cloudflare API token は GitHub Actions（GitHub Secrets）にのみ保持し、開発者のローカル環境には API token を配布しない。ステージング環境がないためローカル `wrangler deploy` も本番環境（`*.workers.dev`）を対象とする点に留意し、常用しない。
 
 ## 7. データベース（D1）とマイグレーション
 
@@ -90,8 +96,10 @@ sequenceDiagram
 
 ## 8. シークレット管理
 
-- Google OAuth の Client ID / Secret など機密情報は、Wrangler Secrets（`wrangler secret put`）で管理し、リポジトリにはコミットしない。
-- GitHub Actions からのデプロイ時は、GitHub Secrets に登録した値を CI 上で Wrangler 経由で設定する。
+- Google OAuth の Client ID / Secret など機密情報は、Wrangler Secrets で管理し、リポジトリにはコミットしない。
+- GitHub Actions からのデプロイ時は、GitHub Secrets に登録した値を CI 上で Wrangler 経由で設定する。ただし `wrangler secret put` はコマンドごとに新しい Worker バージョンを作成して即時デプロイするため、複数シークレットの設定が「マイグレーション適用後に単一の `wrangler deploy`」という順序（7章）を崩し、中間バージョンが本番へ出る可能性がある。これを避けるため、CI では次のいずれかを用いる。
+  - `wrangler versions secret put` でシークレットを新バージョンへ登録し、本番への反映は 7章のフロー内の `wrangler deploy` に集約する。
+  - もしくは `wrangler deploy` の `--secrets-file` 等でシークレットとコードを一括反映する。
 - allowlist の具体的な保持形式や、認証フローの詳細は `auth.md` で定める（本設計書では触れない）。
 
 ## 9. スコープ外
