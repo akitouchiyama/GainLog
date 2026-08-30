@@ -96,10 +96,12 @@ sequenceDiagram
 
 ## 8. シークレット管理
 
-- Google OAuth の Client ID / Secret など機密情報は、Wrangler Secrets で管理し、リポジトリにはコミットしない。
-- GitHub Actions からのデプロイ時は、GitHub Secrets に登録した値を CI 上で Wrangler 経由で設定する。ただし `wrangler secret put` はコマンドごとに新しい Worker バージョンを作成して即時デプロイするため、複数シークレットの設定が「マイグレーション適用後に単一の `wrangler deploy`」という順序（7章）を崩し、中間バージョンが本番へ出る可能性がある。これを避けるため、CI では次のいずれかを用いる。
-  - `wrangler versions secret put` でシークレットを新バージョンへ登録し、本番への反映は 7章のフロー内の `wrangler deploy` に集約する。
-  - もしくは `wrangler deploy` の `--secrets-file` 等でシークレットとコードを一括反映する。
+- Google OAuth の Client ID / Secret など機密情報は、Cloudflare のシークレットとして管理し、リポジトリにはコミットしない。
+- Cloudflare Workers のシークレットはコード（Worker バージョン）とは別に保持され、以降のデプロイ・バージョンへ引き継がれる。そのため CI/CD の通常デプロイ（`wrangler deploy`。7章）はシークレットを再設定しない。
+- OAuth の Client ID / Secret は頻繁に変わらないため、シークレットの初期設定・変更はデプロイフローと切り離して開発者が個別に行う。
+  - 単発の設定・変更： `wrangler secret put <NAME>`（実行時に最新バージョンを複製してシークレットを追加し、即座に本番へ反映される）。
+  - 即時反映を避けたい場合： `wrangler versions secret put <NAME>` で新バージョンにシークレットを登録し、任意のタイミングで `wrangler versions deploy` により反映する。
+- GitHub Actions には Cloudflare API token（デプロイ用）のみを GitHub Secrets として保持し、アプリのシークレット（OAuth Client Secret 等）は CI に渡さない。
 - allowlist の具体的な保持形式や、認証フローの詳細は `auth.md` で定める（本設計書では触れない）。
 
 ## 9. スコープ外
