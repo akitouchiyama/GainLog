@@ -44,7 +44,7 @@ GainLog は、日々の筋力トレーニング（種目・重量・回数・セ
 ## 開発の進め方
 
 - 実装は **t-wada 流の TDD**（テストファースト / Red-Green-Refactor / TODO リスト駆動 / 三角測量）で進める。詳細は `docs/Design/Detailed/test.md`。
-- ディレクトリ構成は単一パッケージ（`src/server` / `src/client` / `src/shared`）を前提とする。詳細は `docs/Design/Detailed/project-structure.md`。
+- ディレクトリ構成は単一パッケージ（`src/api` / `src/client` / `src/shared`）を前提とする。詳細（Worker エントリポイントの配置を含む）は `docs/Design/Detailed/project-structure.md`。
 - 詳細設計フェーズでは、設計書を1本ずつブランチを切って作成し PR を出す。
 
 ## Git
