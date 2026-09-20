@@ -13,7 +13,8 @@
 
 - 作業は `feature/` `fix/` `docs/` 等のプレフィックス付き短命ブランチで行い、PR 経由で `main` にマージする。
 - `main` への直接 commit / push は禁止。
-- `main` へのマージをトリガーに GitHub Actions が「テスト（Vitest）→ マイグレーション適用 → `wrangler deploy`」を自動実行する（`docs/Design/Basic/architecture.md` 6章）。
+- 詳細設計フェーズに限り、一時的な統合ブランチ `docs/detail-design` を置く（詳細設計書 4 本を 1 本ずつ PR で取り込み、完了後に `main` へ PR してから削除する）。恒久的な長期ブランチではないため、上記の「長期ブランチは `main` のみ」と矛盾しない。
+- `main` へのマージをトリガーに GitHub Actions が「テスト（Vitest）→ ビルド → マイグレーション適用 → `wrangler deploy`」を自動実行する（`docs/Design/Basic/architecture.md` 6章、`docs/Design/Detailed/project-structure.md` 6.2）。
 - テスト失敗時はデプロイを中断する。マイグレーション適用後に `wrangler deploy` が失敗した場合は、マイグレーションを再適用せず `wrangler deploy` のみ再試行する（ADR-0004）。
 - ワークフローファイル（`.github/workflows/`）の実体は実装フェーズ最初のタスクで作成する。本 ADR とアーキテクチャ設計書はその挙動の契約を定めるに留める。
 

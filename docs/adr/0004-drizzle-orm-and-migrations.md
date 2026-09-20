@@ -21,3 +21,5 @@ ORM 兼マイグレーションツールとして Drizzle ORM / drizzle-kit を�
 - スキーマ定義を TypeScript の型として扱える。クエリビルダおよび `sql` テンプレートリテラルの補間値は自動でパラメータ化され、これを SQL インジェクション対策の主軸とする（メールアドレス等 PII の平文保存を許容する前提になっている。`auth.md` 4章・11章）。ただし `sql.raw()` や文字列連結はパラメータ化・エスケープされないため、未信頼値をこれらに渡さない規約を詳細設計（`backend.md`）で明記する。
 - マイグレーション適用後に `wrangler deploy` が失敗すると、旧 Worker が新スキーマに接続する状態が生じ得るため、後方互換制約が必須となる（ADR-0002 でステージングを持たない判断とセット）。
 - マイグレーションファイルの配置・命名規則は詳細設計（`project-structure.md` / `backend.md`）で確定する。特に drizzle-kit の `out`（生成先）と Wrangler の `migrations_dir` / `migrations_pattern` を、CI の `wrangler d1 migrations apply` がコミット済み SQL を検出できるよう整合させる（既定の `migrations/*.sql` を使うか、Drizzle のネスト出力に合わせて `migrations_pattern` を設定するか）ことを契約として定める。
+  - 確定（2026-09-20）: drizzle-kit 0.31 系（安定版）の平置き出力（`migrations/NNNN_name.sql`）と Wrangler の既定パターンを使う。詳細は `docs/Design/Detailed/project-structure.md` 8.1。drizzle-kit 1.0 系はサブディレクトリ出力に変わるため、GA 後の移行時に見直す。
+- 「後方互換な変更に限定する」方針のうち、drizzle-kit が生成するテーブル再作成 SQL（トリガー消失・CASCADE のリスク）の扱いは ADR-0011 の規約に従う。
