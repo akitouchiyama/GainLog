@@ -1,0 +1,41 @@
+# 0008. バリデーションは Zod に統一し、shared のスキーマを正本とする
+
+- Status: Accepted
+- Date: 2026-09-20
+
+## Context
+
+バリデーションライブラリの定義が 3 か所で食い違っていた。
+
+- `requirement.md` 6章: Backend に Zod と Valibot、Frontend に Valibot。
+- `openapi.yaml`: 実装時に `@hono/zod-openapi`（Zod）でルート定義する前提。
+- ADR-0007: Valibot スキーマを `src/shared` で front / back 共有する。
+
+一方、`common-spec.md` 3章と `requirement.md` 5.1 は、API と UI で同一の入力制約・メッセージ文言を適用することを求めている。スキーマの定義元を 1 か所に集約する必要がある。
+
+選択肢は次の 3 つだった。
+
+| 案 | 内容 | 主なトレードオフ |
+|---|---|---|
+| A. Valibot 統一 | 要件 6章・ADR-0007 の記述に最も多く現れる | バンドルが小さく FCP・Lighthouse に有利。Hono の OpenAPI 生成統合は Zod 側が公式に厚く、Valibot ではサードパーティや Standard Schema 経由になる可能性がある（未確認） |
+| **B. Zod 統一（採用）** | `@hono/zod-openapi` でルート定義と OpenAPI 生成を公式に統合できる | フロントのバンドルが大きくなりうる。要件 6章・ADR-0007 の Valibot 記述の修正が必要 |
+| C. 併用（back: Zod / front: Valibot） | 現行 6章の字面に近い | 同一制約・文言を二重定義することになり、「API・UI で同一」の保証が難しい |
+
+## Decision
+
+バリデーションは **Zod に統一**する（案 B）。
+
+- `src/shared` のスキーマ・型・制約値・メッセージ文言を、API・UI・Drizzle スキーマ（CHECK）の共通の出所（正本）とする。型は `z.infer` から得る。
+- shared のスキーマは素の `zod`（メタデータは Zod 4 の `.meta()`）で書き、`@hono/zod-openapi` を shared から import しない。`.openapi()` などの拡張は `src/api` 側でのみ適用する。
+- フロントへの型の渡し方は「shared の型 ＋ 薄い fetch ラッパ」とする。Hono RPC（`hc<AppType>`）は `client` から `api` への import 例外を作るため採用しない。`openapi-typescript` は shared との二重管理になるため採用しない。
+- `openapi.yaml` は基本設計時点の API 設計書として残し、API を変更する PR で手動更新する。
+
+詳細は `docs/Design/Detailed/project-structure.md` 4章。
+
+## Consequences
+
+- `requirement.md` 6章から Valibot を外し、Zod を Backend・Frontend 双方に記載する。ADR-0007 の「Valibot」記述は Zod に最小修正する（構成の決定自体は変わらないため Status は Accepted のまま）。
+- Zod は Valibot よりバンドルが大きい。FCP 3 秒・Lighthouse 80（`requirement.md` 6章）への影響は、実装後に計測して判断する（必要なら `zod/mini` 等を検討）。
+- 一次情報で確認できた範囲: `@hono/zod-openapi` 1.6.3 は Zod ^4 が peer、`@asteasolutions/zod-to-openapi` は v8 以降（Zod 4）で `.meta()` に対応する。**shared の素のスキーマを `createRoute` にそのまま渡せることは、公式ドキュメントに明記がなく未確認**であり、実装フェーズ最初のタスクで確認する。成立しない場合も Zod 統一は維持し、api 側でのラップ方法を見直す。
+- `zod` は単一インスタンスに保つ（pnpm の peer 依存解決）。
+- 実装後に、`@hono/zod-openapi` の生成仕様と `openapi.yaml` の差分を CI で検知するかは別途検討する。
