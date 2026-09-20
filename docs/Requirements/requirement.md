@@ -113,9 +113,11 @@ GainLog は、日々の筋力トレーニング（種目・重量・回数・セ
 ## 6. 非機能要件
 
 ### 技術スタック
-- **Backend**: TypeScript, Hono, Zod, OpenAPI, Valibot, Vitest, Drizzle ORM
-- **Frontend**: TypeScript, React, TailwindCSS, Valibot, Vitest, Storybook
+- **Backend**: TypeScript, Hono, Zod, `@hono/zod-openapi`, OpenAPI, Vitest, Drizzle ORM（drizzle-kit）
+- **Frontend**: TypeScript, React, Vite, TailwindCSS, Zod, Vitest, Storybook
 - **DB**: Cloudflare D1（SQLite 互換）
+- **ビルド・開発・品質管理**: Vite（`@cloudflare/vite-plugin`）, Wrangler, pnpm, ESLint, Prettier, Lefthook, gitleaks
+- バリデーションは Zod に統一し、スキーマは `src/shared` で API・UI が共有する（ADR-0008）。詳細な選定・バージョン方針は `docs/Design/Detailed/project-structure.md` 1章。
 
 ### デプロイ
 - Cloudflare Workers 上にデプロイし、任意の場所・端末からアクセス可能とする。
