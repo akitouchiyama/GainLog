@@ -25,9 +25,11 @@ GainLog は、日々の筋力トレーニング（種目・重量・回数・セ
 
 ## 技術スタック（`requirement.md` 6章より）
 
-- **Backend**: TypeScript / Hono / Zod / OpenAPI / Valibot / Vitest / Drizzle ORM
-- **Frontend**: TypeScript / React / TailwindCSS / Valibot / Vitest / Storybook
+- **Backend**: TypeScript / Hono / Zod / `@hono/zod-openapi` / OpenAPI / Vitest / Drizzle ORM（drizzle-kit）
+- **Frontend**: TypeScript / React / Vite / TailwindCSS / Zod / Vitest / Storybook
 - **DB**: Cloudflare D1（SQLite 互換）
+- **ビルド・開発・品質管理**: Vite（`@cloudflare/vite-plugin`）/ Wrangler / pnpm / ESLint / Prettier / Lefthook / gitleaks
+- バリデーションは Zod に統一し、スキーマは `src/shared` を正本として API・UI で共有する（ADR-0008）。
 - **配置**: Cloudflare Workers 単一プロジェクト。React SPA を Workers Static Assets で同梱し、Hono API・D1 と同一オリジンで動作する。
 
 > `requirement.md` 6章に明記されていないライブラリを追加する場合は、6章への追記を含めて合意を取ってから導入する。
@@ -35,7 +37,7 @@ GainLog は、日々の筋力トレーニング（種目・重量・回数・セ
 ## 主要な設計上の制約
 
 - Cloudflare Workers / D1 の単一プロジェクト構成（モノリシック）。分散構成は取らない。
-- 環境は**本番のみ**。ステージング・検証環境は設けない。ローカル開発は `wrangler dev` で本番相当を再現する。
+- 環境は**本番のみ**。ステージング・検証環境は設けない。ローカル開発は Vite の開発サーバ（`@cloudflare/vite-plugin`。workerd 上で Worker を実行）で本番相当を再現する。
 - ブランチは `main` のみ。`feature/*` 等 → PR → `main` マージで GitHub Actions が自動デプロイ。
 - 日付の基準タイムゾーンは JST（Asia/Tokyo）固定。日付表現は ISO 8601（YYYY-MM-DD）。
 - 重量の単位は kg のみ（lb 非対応）。
@@ -46,6 +48,8 @@ GainLog は、日々の筋力トレーニング（種目・重量・回数・セ
 - 実装は **t-wada 流の TDD**（テストファースト / Red-Green-Refactor / TODO リスト駆動 / 三角測量）で進める。詳細は `docs/Design/Detailed/test.md`。
 - ディレクトリ構成は単一パッケージ（`src/api` / `src/client` / `src/shared`）を前提とする。詳細（Worker エントリポイントの配置を含む）は `docs/Design/Detailed/project-structure.md`。
 - 詳細設計フェーズでは、設計書を1本ずつブランチを切って作成し PR を出す。
+- コミット・push 前の検査（pre-commit: gitleaks・禁止ファイルガード・lint・型・要件整合性・migration 再作成ガード、pre-push: LLM レビュー）の方針は `docs/Design/Detailed/project-structure.md` 9章で定めた。ツールの導入は実装フェーズ最初のタスクのため、**現時点では未導入**。
+- マイグレーションは `drizzle-kit generate` で生成する。drizzle-kit がテーブル再作成 SQL（`__new_` / `DROP TABLE`）を生成した場合、トリガー消失や CASCADE のリスクがあるため、`project-structure.md` 8.3 の規約に従う（検出は同 9.2）。
 
 ## Git
 
