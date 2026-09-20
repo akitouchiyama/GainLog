@@ -4,7 +4,7 @@
 
 GainLog は、Cloudflare Workers 上にフロントエンド（React SPA）・バックエンド API（Hono）・DB（D1）を単一の Cloudflare プロジェクトとして同梱するモノリシック構成をとる。実質 1 ユーザー・低トラフィックの個人利用アプリであり、複雑な分散構成は取らない。
 
-対象は本番環境のみとし、ローカル開発は `wrangler dev` によって本番相当の構成を再現する（ステージング環境は設計対象外）。
+対象は本番環境のみとし、ローカル開発は Vite の開発サーバ（`@cloudflare/vite-plugin`。Worker を本番と同じ workerd 上で実行。ADR-0009）によって本番相当の構成を再現する（ステージング環境は設計対象外）。
 
 ## 2. システム構成図
 
@@ -43,16 +43,16 @@ flowchart LR
 
 - `assets.not_found_handling = "single-page-application"` を設定し、静的アセットに一致しないパス（React Router のクライアントサイドルート等）は `404` ではなく `index.html`（200）へフォールバックさせる。これがないと、React ルートへの直接アクセス・リロードが `404` になる。
 - `run_worker_first` に `/api/*` を指定し、`/api/*` へのリクエストは静的アセットの有無に関わらず必ず Worker（Hono API）で先に処理する。これがないと、将来 `/api/` 配下と同名の静的アセットが生成された場合に API がバイパスされうる。
-- 上記に相当する挙動を Worker 実装（`env.ASSETS.fetch()` の明示呼び出し等）で担保してもよい。具体的な設定ファイル（`wrangler.jsonc` 等）の記述は詳細設計フェーズで定める。
+- 上記に相当する挙動を Worker 実装（`env.ASSETS.fetch()` の明示呼び出し等）で担保してもよい。具体的な設定ファイル（`wrangler.jsonc` 等）の記述は詳細設計フェーズで定める（`docs/Design/Detailed/project-structure.md` 5章で確定。設定による振り分け方式を採用し、Worker 内で `env.ASSETS.fetch()` は呼ばない）。
 
 ## 4. 環境構成
 
 - 本番環境（production）のみを設計対象とする。ステージング環境は用意しない。
-- ローカル開発時は `wrangler dev` を用いて、本番同様の Worker + D1（ローカル SQLite）構成で動作確認する。
+- ローカル開発時は Vite の開発サーバ（`@cloudflare/vite-plugin`）を用いて、本番同様の Worker（workerd）+ D1（ローカル SQLite）構成で動作確認する。ローカル D1 の状態は Wrangler と同じ `.wrangler/state` を共有する。
 - ローカル D1 の運用は以下のコマンドで行う。
   - 初期化・マイグレーション適用: `wrangler d1 migrations apply <DB_NAME> --local`
   - リセット: ローカル DB ファイル（`.wrangler/state` 配下）を削除し、再度マイグレーションを適用する
-  - シード投入: `wrangler d1 execute <DB_NAME> --local --file=./seed.sql`（シードデータの内容は実装時に定める）
+  - シード投入: 事前定義種目のシードはマイグレーションに含めて管理する（`docs/Design/Detailed/project-structure.md` 8.4、ADR-0011）。ローカルでは上記のマイグレーション適用で投入され、本番も CI のマイグレーション適用（7章）で投入される。シードデータの内容は詳細設計（`backend.md`）で定める。
 
 ## 5. ドメイン構成
 
@@ -77,19 +77,21 @@ sequenceDiagram
     GH->>CI: main への push をトリガー
     CI->>CI: 依存関係インストール
     CI->>CI: テスト実行（Vitest）
+    CI->>CI: ビルド（vite build）
     CI->>D1: マイグレーション適用（wrangler d1 migrations apply）
     CI->>CF: wrangler deploy
     CF-->>Dev: 本番反映完了
 ```
 
-- テスト（Vitest）が失敗した場合はデプロイを中断する。
+- テスト（Vitest）またはビルドが失敗した場合は、マイグレーション適用・デプロイを行わず中断する。
+- PR の作成・更新時にも、lint・型チェック・テスト・ビルド・シークレット検出（gitleaks）を GitHub Actions で実行する（`docs/Design/Detailed/project-structure.md` 9.5）。デプロイは `main` へのマージ時のみ。
 - ローカルからの手動デプロイ（`wrangler deploy`）は開発時の動作確認用途として許容するが、正規のリリース経路は上記の CI/CD フローとする。ローカルからのデプロイは `wrangler login`（開発者個人の Cloudflare アカウントによる OAuth 認証）で行い、本番環境へのデプロイ権限を持つ Cloudflare API token は GitHub Actions（GitHub Secrets）にのみ保持し、開発者のローカル環境には API token を配布しない。ステージング環境がないためローカル `wrangler deploy` も本番環境（`*.workers.dev`）を対象とする点に留意し、常用しない。
 
 ## 7. データベース（D1）とマイグレーション
 
 - DB エンジンは Cloudflare D1（SQLite 互換）。
 - ORM 兼マイグレーションツールとして Drizzle ORM / drizzle-kit を採用する（要件定義書 6 章 技術スタックに追記済み）。
-- マイグレーションファイルは開発者がローカルで `drizzle-kit generate` により生成し、リポジトリにコミットする。CI/CD 側では生成済みのマイグレーションファイルを `wrangler d1 migrations apply` で適用するのみとし、CI 上でのファイル生成は行わない（手動適用は行わない）。
+- マイグレーションファイルは開発者がローカルで `drizzle-kit generate` により生成し、リポジトリにコミットする。CI/CD 側では生成済みのマイグレーションファイルを `wrangler d1 migrations apply` で適用するのみとし、CI 上でのファイル生成は行わない（手動適用は行わない）。マイグレーションの配置・運用フロー・トリガー DDL・シードの扱いは `docs/Design/Detailed/project-structure.md` 8章で定める。
 - マイグレーションは CI/CD のデプロイフロー内で `wrangler deploy` に先立って自動適用する。この順序上、マイグレーション適用後に `wrangler deploy` が失敗すると、旧バージョンの Worker が新しいスキーマに接続する状態が生じ得る。そのため、スキーマ変更は旧 Worker からも問題なくアクセスできる後方互換な変更（カラム追加など）に限定し、破壊的変更（カラム削除・型変更等）が必要な場合は複数回のデプロイに分割する。
 - `wrangler deploy` が失敗した場合、マイグレーション自体は成功しているため DB のロールバックは行わず、CI を再実行して `wrangler deploy` のみを再試行する。
 - テーブルスキーマは `db.md` で定める。
@@ -101,7 +103,7 @@ sequenceDiagram
 - OAuth の Client ID / Secret は頻繁に変わらないため、シークレットの初期設定・変更はデプロイフローと切り離して開発者が個別に行う。
   - 単発の設定・変更： `wrangler secret put <NAME>`（実行時に最新バージョンを複製してシークレットを追加し、即座に本番へ反映される）。
   - 即時反映を避けたい場合： `wrangler versions secret put <NAME>` で新バージョンにシークレットを登録し、任意のタイミングで `wrangler versions deploy` により反映する。
-- GitHub Actions には Cloudflare API token（デプロイ用）のみを GitHub Secrets として保持し、アプリのシークレット（OAuth Client Secret 等）は CI に渡さない。
+- GitHub Actions には Cloudflare API token（デプロイ用）のみを GitHub Secrets として保持し、アプリのシークレット（OAuth Client Secret 等）は CI に渡さない。対象アカウントを特定するための `CLOUDFLARE_ACCOUNT_ID` は機密ではないため GitHub Variables に置く（`docs/Design/Detailed/project-structure.md` 7章）。
 - allowlist の具体的な保持形式や、認証フローの詳細は `auth.md` で定める（本設計書では触れない）。
 
 ## 9. スコープ外
