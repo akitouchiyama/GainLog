@@ -191,8 +191,9 @@ Googleアカウントに紐づく内部ユーザー情報。JITプロビジョ�
 | `other` | その他 |
 
 - `owner_user_id` がNULLの行（事前定義データ）は全ユーザーが閲覧可能・編集不可、`NOT NULL`の行はその`owner_user_id`が所有者本人のみ編集・削除可能とする（auth.md 8章、requirement.md 5.5）。
-- `UNIQUE(owner_user_id, name)` により、同一ユーザー内での種目名重複を防止する。ただし SQLite の UNIQUE 制約は NULL 同士を区別する（`NULL != NULL` として扱われる）ため、**事前定義種目（`owner_user_id` が NULL）同士の名前重複はこの制約では防げない**。事前定義種目の重複防止はシードデータ投入時の運用で担保する。
-- 事前定義種目の初期データ投入は、architecture.md 記載のシード投入手順（`wrangler d1 execute --file=./seed.sql`）で行う想定（具体的なシードデータ内容は9章のスコープ外）。
+- `UNIQUE(owner_user_id, name)` により、同一ユーザー内での種目名重複を防止する。ただし SQLite の UNIQUE 制約は NULL 同士を区別する（`NULL != NULL` として扱われる）ため、**事前定義種目（`owner_user_id` が NULL）同士の名前重複はこの制約では防げない**。事前定義種目の重複防止は、シードを含むマイグレーションの内容とテストで担保する（`docs/Design/Detailed/project-structure.md` 8.4）。
+- 事前定義種目の初期データは、マイグレーション（`drizzle-kit generate --custom` で作成する SQL）に含めて投入する（`docs/Design/Detailed/project-structure.md` 8.4、ADR-0011）。具体的なシードデータ内容は9章のスコープ外（`backend.md` で確定する）。
+- `category` の `CHECK` 制約は、Drizzle の `text('category', { enum })` では DB に生成されない（TypeScript の型が絞られるだけ）ため、`check()` で明示的に定義する（`docs/Design/Detailed/project-structure.md` 4.3）。
 
 ### 5.5 workout_records
 
@@ -255,7 +256,7 @@ D1 はこれらの FK 制約をデフォルトで強制するため、有効化�
 
 ## 7. トリガー定義
 
-DBトリガーで実現する2種類の整合性ルールのDDLを以下に示す。drizzle-kit はスキーマファイル（`schema.ts`）からトリガーDDLを自動生成しないため、マイグレーションファイルへ生SQLとして手動追記する運用になる（architecture.md 7章の運用フローへの補足。詳細な組み込み方法は10章の未解決事項）。
+DBトリガーで実現する2種類の整合性ルールのDDLを以下に示す。drizzle-kit はスキーマファイル（`schema.ts`）からトリガーDDLを自動生成しないため、マイグレーションファイルへ生SQLとして手動追記する運用になる（architecture.md 7章の運用フローへの補足。組み込み方法は `docs/Design/Detailed/project-structure.md` 8.3 で確定済み：`--custom` の追記型 migration。テーブル再作成を伴う migration ではトリガーが消えるため再作成する規約がある）。
 
 ```sql
 -- updated_at 自動更新トリガー（users / exercises / workout_records / workout_sets）
@@ -349,11 +350,11 @@ WHERE wr.user_id = :userId
 以下は本設計書の対象外とする。
 
 - リポジトリ層（`repositories/`）のディレクトリ構成・命名規則、関数シグネチャ規約（auth.md 13章「詳細設計で確定すべき項目」を参照。詳細設計フェーズで定める）
-- マイグレーションファイルの具体的な配置パス・命名規則（運用フロー自体はarchitecture.md 7章で確定済み）
+- マイグレーションファイルの具体的な配置パス・命名規則（運用フロー自体はarchitecture.md 7章で確定済み。配置・運用は `docs/Design/Detailed/project-structure.md` 8章で確定）
 - 実際のDrizzle ORMスキーマコード（TypeScript）による実装
 - Phase 2機能（`menus`等）の詳細スキーマ。Phase 2着手時に別途本書を拡張する
 - allowlistのGUI管理機能（Phase 2）のスキーマ変更（要件定義書5.12参照）
-- シードデータ（事前定義種目一覧等）の具体的な内容
+- シードデータ（事前定義種目一覧等）の具体的な内容（配置・投入経路は `docs/Design/Detailed/project-structure.md` 8.4、内容は `backend.md` で確定する）
 - ユーザー削除機能（`users` 行の削除、およびそれに伴う記録データの一括削除）。Phase 1 では提供しない。緊急のアクセス遮断は allowlist からの削除＋該当 `user_id` の `sessions` 行削除で対応する（`auth.md` 4章）。`user_id` 系 FK の `ON DELETE CASCADE` 定義は Phase 2 のユーザー削除に備えた設計であり、Phase 1 で `DELETE FROM users` を実行する運用は想定しない。CASCADE / RESTRICT の相互作用の詳細は10章 未解決事項1を参照
 
 ## 10. 整合性チェック結果・未解決事項
@@ -376,4 +377,4 @@ WHERE wr.user_id = :userId
 ### 未解決事項
 
 1. **ユーザー削除時の CASCADE / RESTRICT の相互作用（Phase 2 で確定）**：ユーザー削除は Phase 1 のスコープ外とする（9章「スコープ外」参照）。Phase 2 で実装する際、`users` の削除は `workout_records`（CASCADE）→ 配下の `workout_sets`（CASCADE）を削除する一方、同じユーザーの `exercises`（`owner_user_id` の CASCADE）も削除対象となる。D1（SQLite）が単一の親 DELETE から複数の子テーブルへの CASCADE をどの順序で処理するかは厳密に規定されておらず、`exercises` が先に削除されると `workout_sets.exercise_id` の即時評価 `ON DELETE RESTRICT` に抵触してユーザー削除自体が失敗しうる（`PRAGMA defer_foreign_keys` は即時評価の RESTRICT を遅延できない）。そのため Phase 2 では、ユーザー削除をアプリケーション層で `workout_sets → workout_records → exercises` の明示的な順序で削除するトランザクションとして実装し、D1 上で回帰テストする。7章のトリガーの多重発火・冗長 DELETE の実挙動もこの時点で併せて検証する。
-2. **トリガーDDLのマイグレーション統合方法**：drizzle-kit生成のマイグレーションファイルへトリガーDDLをどう組み込むか（生SQL手動追記の運用ルール、drizzle-kitの再生成時に上書きされないようにする方法等）は詳細設計フェーズで確定する。
+2. **トリガーDDLのマイグレーション統合方法（確定済み）**：`docs/Design/Detailed/project-structure.md` 8.3 で確定した。`drizzle-kit generate --custom` で作成した空のSQLに追記型で管理し、以降の再生成で上書きされない。drizzle-kit が生成するテーブル再作成SQL（`DROP TABLE`）ではトリガーが消えるため、再作成を含む migration では末尾でトリガーを再作成する規約とする（ADR-0011）。

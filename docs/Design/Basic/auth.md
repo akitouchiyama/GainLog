@@ -266,9 +266,9 @@ D1（SQLiteベース）にはPostgreSQLのようなDBエンジン側のRow Level
 
 ### 詳細設計で確定すべき項目一覧
 
-- [ ] リポジトリ層のディレクトリ構成・命名規則（例：`src/repositories/*.ts`）
+- [ ] リポジトリ層のディレクトリ構成・命名規則（`src/api` 配下に置く。`docs/Design/Detailed/project-structure.md` 2章。内部の構成・命名は `backend.md` で確定する）
 - [ ] リポジトリ関数のシグネチャ規約（`userId`を第一引数に固定する等）
-- [ ] ハンドラから直接Drizzleクエリを呼び出すことを禁止するLintルールの要否・具体的な実装方法
+- [ ] ハンドラから直接Drizzleクエリを呼び出すことを禁止するLintルールの要否・具体的な実装方法（方式は確定：ESLint の `no-restricted-imports` をディレクトリ別に設定し、カスタムルールは作らない。`docs/Design/Detailed/project-structure.md` 3.2。禁止の対象パスは `backend.md` で確定する）
 - [ ] 所有者チェック対象リソース一覧（`WorkoutRecord`・`WorkoutSet`・ユーザー追加`Exercise`等）の網羅的な洗い出し
 - [ ] 事前定義データ（`owner_user_id`がnull、8章の例外ケース）に対する分岐処理をリポジトリ層でどう表現するか
 - [ ] 統合テストの配置・命名規約、およびCIでの実行必須化の要否

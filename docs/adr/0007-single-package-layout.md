@@ -13,8 +13,8 @@
 
 - バックエンドの公開面はすべて `/api/*`（OAuth ログイン系も `/api/auth/*`）で OpenAPI 仕様化されているため、ディレクトリ名は `server` ではなく `api` とし、実体と名前を一致させる。
 - フロント・バックは同一 Cloudflare プロジェクト・同一 Worker にデプロイされる（ADR-0001）ため、パッケージ境界を分けても最終的な成果物は 1 つ。
-- 型・バリデーションスキーマ（Valibot）は `src/shared` で front / back 共有する。
-- 具体的なディレクトリレイアウト・ビルド構成（Vite + Wrangler）・Worker エントリポイント（静的アセットと Hono をパス振り分けする箇所）の配置は `docs/Design/Detailed/project-structure.md` で確定する。
+- 型・バリデーションスキーマ（Zod。当初は Valibot としていたが ADR-0008 で Zod に統一）は `src/shared` で front / back 共有する。
+- 具体的なディレクトリレイアウト・ビルド構成（Vite + `@cloudflare/vite-plugin`。ADR-0009）・Worker エントリポイント（静的アセットと Hono をパス振り分けする箇所）の配置は `docs/Design/Detailed/project-structure.md` で確定した。
 
 ## Consequences
 

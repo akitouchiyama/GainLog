@@ -39,3 +39,8 @@ GainLog における設計上の重要な判断を、背景・決定・結果と
 | [0005](0005-bff-cookie-session-auth.md) | 認証は BFF ＋ Cookie セッション方式、allowlist ＋ `sub` 識別 | Accepted |
 | [0006](0006-error-code-maps-to-http-status.md) | 共通エラーの `code` を HTTP ステータスと 1 対 1 に対応させる | Accepted |
 | [0007](0007-single-package-layout.md) | 詳細設計のディレクトリ構成は単一パッケージとする | Accepted |
+| [0008](0008-zod-and-shared-schema-as-source-of-truth.md) | バリデーションは Zod に統一し、shared のスキーマを正本とする | Accepted |
+| [0009](0009-vite-with-cloudflare-vite-plugin.md) | 開発・ビルド構成は Vite ＋ `@cloudflare/vite-plugin` とする | Accepted |
+| [0010](0010-quality-gates-and-toolchain.md) | 品質ゲートとツールチェーンの方針 | Accepted |
+| [0011](0011-seed-and-triggers-as-migrations.md) | シードとトリガー DDL は migration として管理する | Accepted |
+| [0012](0012-container-for-build-verification.md) | 開発は WSL 上で行い、ビルド成果物の確認に Podman のコンテナを使う | Accepted |
