@@ -43,3 +43,4 @@ GainLog における設計上の重要な判断を、背景・決定・結果と
 | [0009](0009-vite-with-cloudflare-vite-plugin.md) | 開発・ビルド構成は Vite ＋ `@cloudflare/vite-plugin` とする | Accepted |
 | [0010](0010-quality-gates-and-toolchain.md) | 品質ゲートとツールチェーンの方針 | Accepted |
 | [0011](0011-seed-and-triggers-as-migrations.md) | シードとトリガー DDL は migration として管理する | Accepted |
+| [0012](0012-container-for-build-verification.md) | 開発は WSL 上で行い、ビルド成果物の確認に Podman のコンテナを使う | Accepted |

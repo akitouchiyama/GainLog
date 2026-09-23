@@ -24,6 +24,7 @@
 | 開発構成は Vite ＋ `@cloudflare/vite-plugin` | 本書 6章。ADR-0009 | 本書で確定 |
 | シードとトリガーは migration に含める | 本書 8章。ADR-0011 | 本書で確定 |
 | 品質ゲートの方針 | 本書 9章。ADR-0010 | 本書で確定 |
+| 開発は WSL 上、ビルド成果物の確認はコンテナ | 本書 6.4。ADR-0012 | 本書で確定 |
 
 ### 導入するツール・ライブラリ（要件定義書 6章への追記対象）
 
@@ -41,6 +42,7 @@
 | Git フック | Lefthook | – | |
 | シークレット検出 | gitleaks | – | pre-commit と CI |
 | パッケージマネージャ | pnpm | – | |
+| コンテナ | Podman ＋ podman-compose（Containerfile / Compose Spec） | 開発機で Podman 4.9.3・podman-compose を確認 | npm 依存ではない。ビルド成果物の確認用（6.4） |
 
 React Router・サーバー状態管理・ID token 検証ライブラリ・Tailwind の版・テスト用ライブラリは、それぞれ `frontend.md` / `backend.md` / `test.md` で選定し、その PR で 6章へ追記する。
 
@@ -73,6 +75,9 @@ GainLog/
 ├── tsconfig.json             # references のみ（3章）
 ├── tsconfig.api.json / tsconfig.client.json / tsconfig.shared.json
 ├── lefthook.yml              # Git フック定義（9章）
+├── Containerfile             # ビルド成果物確認用のイメージ定義（6.4）
+├── compose.yaml              # 同上の起動定義（Compose Spec。6.4）
+├── .containerignore          # イメージに含めないもの（6.4）
 ├── .dev.vars.example         # ローカル用シークレットのキー一覧（値なし。7章）
 ├── .nvmrc / package.json / pnpm-lock.yaml
 └── CLAUDE.md / README.md     # CONTRIBUTING.md は実装着手直前に追加（ADR-0003）
@@ -298,6 +303,36 @@ export default defineConfig({
 - Vitest はルートの `vitest.config.ts` で **api／client／shared の 3 プロジェクトに分ける**（Workers 環境・DOM 環境・Node 環境）。使用するプールやライブラリは `test.md` で確定する。
 - **規約**: `@cloudflare/vite-plugin` は `vite.config.ts` にのみ含め、Storybook と Vitest（client・shared）が Worker 用プラグインを読み込まない設定にする。具体的な分離方法は `frontend.md`（Storybook）・`test.md`（Vitest）で確定する。
 
+### 6.4 開発環境とコンテナでのビルド成果物確認（ADR-0012）
+
+**役割分担:**
+
+| 用途 | 実行場所 | 内容 |
+|---|---|---|
+| 日常の開発（編集・`pnpm dev`・テスト・lint・型） | WSL 上に直接導入 | Node は `.nvmrc`、pnpm は `packageManager`（corepack）で版を固定する。Git フック（9章）・pre-push の `claude -p`・Claude Code からのコマンド実行もここで行う |
+| ビルド成果物の確認 | Podman のコンテナ | クリーンな環境で lockfile から再現できることを確認する |
+
+- 開発そのものをコンテナで行わないのは、Git フック・`claude -p`・Claude Code の実行経路をすべてコンテナ対応させる手間が、1 人・1 マシンの開発では恩恵を上回るためである（ADR-0012）。
+- 本番は Workers でありコンテナではない。コンテナ内でも Worker は workerd で動くため、「本番相当」の度合いはホストで動かす場合と変わらない。コンテナで得られるのは「lockfile から再現できること」の確認である。
+
+**コンテナの構成（方針）:**
+
+| 項目 | 方針 |
+|---|---|
+| ベースイメージ | Debian 系の Node イメージ（例：`node:<.nvmrc の版>-bookworm-slim`）。workerd は musl（Alpine）に対応しないため Alpine は使わない |
+| ビルド | 多段ビルド。依存段階で `pnpm install --frozen-lockfile`、ビルド段階で `vite build` |
+| 起動 | ローカル D1 に migration を適用（`wrangler d1 migrations apply gainlog --local`）した後、`vite preview --host 0.0.0.0` で配信する |
+| ソースのマウント | しない（イメージに焼き込んだ成果物のみを動かす） |
+| ポート | `127.0.0.1:4173` にのみ公開する（外部から到達させない） |
+| ローカル D1 の状態 | コンテナ内で使い捨て（ボリュームに永続化しない）。起動のたびに migration（シードを含む。8.4）から再構築される |
+| シークレット | `.dev.vars` はイメージに焼き込まない（`.containerignore` で除外）。実行時に読み取り専用でマウントする |
+| 定義 | `Containerfile` ＋ `compose.yaml`（Compose Spec のため Docker でも起動できる）。`.containerignore` で `node_modules`・`dist`・`.wrangler`・`.dev.vars`・`.git` を除外する |
+| 起動コマンド | `podman-compose` を明示して使う（`podman compose` は環境によって Docker Desktop の `docker-compose` を外部プロバイダとして拾うことを確認したため）。npm scripts で包む（10章） |
+
+- OAuth の redirect URI は完全一致が必要なため、`vite preview` の origin（`http://localhost:4173`）も Google Cloud Console への登録対象になる（7章）。
+- `vite preview` が `.dev.vars` を読み込むか、rootless Podman の警告（`/` が shared mount でない）が読み取り専用マウントに影響するかは未確認である（未解決事項）。
+- イメージが実際にビルドできることは PR の CI で検証する（9.5）。
+
 ## 7. 環境変数・シークレット・バインディング
 
 | 名前 | 種別 | ローカル | 本番 | 用途 |
@@ -448,6 +483,7 @@ Git 純正の pre-commit の一部として、LLM を呼ばないルールベー
 - **PR**: 次の2段で実行する。`architecture.md` 6章が定める `main` マージ時のデプロイフローに加えて、PR 時にも検査を行う（追従は12章）。
   1. **gitleaks ジョブ**（先頭・独立）: 依存のインストールもビルドも不要なため最初に実行する。PR のコミット範囲を検査するため checkout は `fetch-depth: 0` とする。gitleaks はバイナリを直接実行する（`gitleaks-action` v2 は Organization のリポジトリでライセンスキーを要するため、将来の移管に備えて依存しない）。
   2. **検査ジョブ**（`needs: gitleaks`）: 依存インストール（`pnpm install --frozen-lockfile`）→ lint → 型チェック → テスト（Vitest）→ ビルド。gitleaks が検知した場合は実行されない。
+  3. **コンテナビルドジョブ**（`needs: gitleaks`。検査ジョブと並列）: `Containerfile` からイメージをビルドし、定義が壊れていないことを確認する（6.4）。起動・動作確認までは行わない。ランナーの Podman を使う想定で、使えない場合は `docker build` で代替する（Containerfile は OCI 準拠のためどちらでもビルドできる）。
 - **main**: テスト → ビルド → マイグレーション適用 → `wrangler deploy`（6.2）。テストが失敗した場合はデプロイを中断する。`wrangler deploy` が失敗した場合は、マイグレーションを再適用せずデプロイのみを再試行する（ADR-0004）。
 - PR の必須チェック化（Branch protection）は GitHub の設定であり、`CONTRIBUTING.md`（実装着手直前）で手順化する。
 
@@ -470,6 +506,7 @@ Git 純正の pre-commit の一部として、LLM を呼ばないルールベー
 | `test` | `vitest run`（詳細は `test.md`） |
 | `db:generate` / `db:migrate:local` / `db:reset:local` | 8.2 |
 | `storybook` / `storybook:build` | `frontend.md` で確定 |
+| `container:up` / `container:down` | `podman-compose up --build` / `podman-compose down`（6.4） |
 
 - 本番デプロイ用の script は設けない。正規経路は CI のみとする（`architecture.md` 6章。ローカルからの `wrangler deploy` は動作確認用途で常用しない）。
 
@@ -497,8 +534,9 @@ Git 純正の pre-commit の一部として、LLM を呼ばないルールベー
 | ディレクトリ構成・Worker エントリの配置 | ADR-0007（詳細設計で確定） | 2章で確定 | 整合。ADR-0007 に本書への参照を追記 |
 | `wrangler.jsonc` の設定方針 | `architecture.md` 3章（`not_found_handling`・`run_worker_first`。設定方式か Worker 実装かは任意） | 設定方式を採用（5章） | 整合 |
 | 統合ブランチの位置づけ | ADR-0003（`main` のみ） | 詳細設計フェーズ限定の一時的な統合ブランチ | **追従修正が必要**：ADR-0003 に注記 |
-| ADR 一覧 | `docs/adr/README.md` | ADR-0008〜0011 を追加 | **追従修正が必要**：一覧を更新 |
-| CLAUDE.md | 技術スタック節・開発の進め方 | 技術スタックの更新、品質ゲートの言及（コミット・push 前に走る検査）、ドキュメント地図の更新 | **追従修正が必要** |
+| 開発環境・コンテナ | 記載なし（ローカルに直接導入する前提） | 開発は WSL 上、ビルド成果物の確認は Podman のコンテナ（6.4） | **追従修正が必要**：`requirement.md` 6章に Podman を追記。ADR-0012 を追加 |
+| ADR 一覧 | `docs/adr/README.md` | ADR-0008〜0012 を追加 | **追従修正が必要**：一覧を更新 |
+| CLAUDE.md | 技術スタック節・開発の進め方 | 技術スタックの更新（Podman を含む）、品質ゲートの言及（コミット・push 前に走る検査）、ドキュメント地図の更新 | **追従修正が必要** |
 
 ## 13. 未解決事項
 
@@ -514,4 +552,5 @@ Git 純正の pre-commit の一部として、LLM を呼ばないルールベー
 10. **要件整合性チェックの許可リスト**の初期内容（6章の技術名とパッケージ名の対応表）。
 11. **shared の素の Zod スキーマを `@hono/zod-openapi` の `createRoute` に渡せるか**（4.2）。実装フェーズ最初のタスクで確認する。
 12. **Hono RPC の成立性**（4.5）：`OpenAPIHono` での chain の要否、型推論のコスト、`client` の型チェックでの Workers 型の解決。実装フェーズ最初のタスクで確認し、成立しない場合は「`shared` の型＋薄い fetch ラッパ」に戻す。
-13. `backend.md`・`frontend.md`・`test.md` へ引き継ぐ事項：リポジトリ層の内部構成と `userId` の必須化（`backend.md`）、種目シードの内容（`backend.md`）、OpenAPI 仕様の生成経路（`backend.md`。4.4）、RPC クライアントのラッパと共通エラーの扱い（`frontend.md`。4.5）、統合テストの配置と CI での必須化・トリガー存在テスト・CHECK 制約の突合テスト・事前定義種目がある前提のテストデータ（`test.md`）。
+13. **コンテナでのビルド成果物確認**（6.4）：`vite preview` が `.dev.vars` を読み込むか、rootless Podman の警告（`/` が shared mount でない）の影響、GitHub Actions のランナーでの Podman の利用可否。実装フェーズ最初のタスクで確認する。
+14. `backend.md`・`frontend.md`・`test.md` へ引き継ぐ事項：リポジトリ層の内部構成と `userId` の必須化（`backend.md`）、種目シードの内容（`backend.md`）、OpenAPI 仕様の生成経路（`backend.md`。4.4）、RPC クライアントのラッパと共通エラーの扱い（`frontend.md`。4.5）、統合テストの配置と CI での必須化・トリガー存在テスト・CHECK 制約の突合テスト・事前定義種目がある前提のテストデータ（`test.md`）。

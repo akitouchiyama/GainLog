@@ -29,6 +29,7 @@ GainLog は、日々の筋力トレーニング（種目・重量・回数・セ
 - **Frontend**: TypeScript / React / Vite / TailwindCSS / Zod / Vitest / Storybook
 - **DB**: Cloudflare D1（SQLite 互換）
 - **ビルド・開発・品質管理**: Vite（`@cloudflare/vite-plugin`）/ Wrangler / pnpm / ESLint / Prettier / Lefthook / gitleaks
+- **コンテナ**: Podman / podman-compose。ビルド成果物の確認用のみで、開発は WSL 上で行う（ADR-0012）
 - バリデーションは Zod に統一し、スキーマは `src/shared` を正本として API・UI で共有する（ADR-0008）。
 - **配置**: Cloudflare Workers 単一プロジェクト。React SPA を Workers Static Assets で同梱し、Hono API・D1 と同一オリジンで動作する。
 
