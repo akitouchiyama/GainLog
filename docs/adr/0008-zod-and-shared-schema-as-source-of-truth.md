@@ -27,7 +27,7 @@
 
 - `src/shared` のスキーマ・型・制約値・メッセージ文言を、API・UI・Drizzle スキーマ（CHECK）の共通の出所（正本）とする。型は `z.infer` から得る。
 - shared のスキーマは素の `zod`（メタデータは Zod 4 の `.meta()`）で書き、`@hono/zod-openapi` を shared から import しない。`.openapi()` などの拡張は `src/api` 側でのみ適用する。
-- フロントへの型の渡し方は「shared の型 ＋ 薄い fetch ラッパ」とする。Hono RPC（`hc<AppType>`）は `client` から `api` への import 例外を作るため採用しない。`openapi-typescript` は shared との二重管理になるため採用しない。
+- API の呼び出しは Hono RPC（`hc<AppType>`）で行い、`client` から `src/api/index.ts` の `AppType` を `import type` することだけを依存方向ルールの例外とする。RPC で得られるのは型のみのため、フォームの入力検証・エラー文言・制約値は引き続き shared を使う。成立性は実装フェーズ最初のタスクで確認し、成立しない場合は「shared の型 ＋ 薄い fetch ラッパ」に戻す。`openapi-typescript` は依存と生成手順が増え、shared と役割が重なるため採用しない。
 - `openapi.yaml` は基本設計時点の API 設計書として残し、API を変更する PR で手動更新する。
 
 詳細は `docs/Design/Detailed/project-structure.md` 4章。

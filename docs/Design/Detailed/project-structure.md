@@ -111,7 +111,8 @@ flowchart LR
 | `client` → `shared` | 可 | 型・スキーマ・制約値・JST 日付を共有 |
 | `api` → `shared` | 可 | 同上 |
 | `shared` → `api` / `client` | **不可** | 共有コードが片側に依存すると、もう片側のバンドル・型環境を汚染する |
-| `api` ⇄ `client` | **不可**（`import type` も含む） | Hono RPC（`hc<AppType>`）は採用しない。境界に例外を作らない（4章） |
+| `api` ⇄ `client` | **不可**（例外は次の1点のみ） | 互いのバンドル・型環境を汚染しないため |
+| `client` → `src/api/index.ts` の `AppType`（`import type` のみ） | **例外として可** | Hono RPC（`hc<AppType>`）で API の型を得るため（4.5）。型のみの import はビルド時に消えるためバンドルに影響しない |
 | `shared` → `hono` / `@hono/*` / `drizzle-orm` / `react` / DOM・Workers 固有 API | **不可** | 純粋な TypeScript ＋ `zod` のみで書く（理由は下記） |
 
 `shared` を純粋な TypeScript ＋ `zod` に限る理由は、api / client への依存を持たせないことに加えて次のとおりである。
@@ -143,10 +144,11 @@ flowchart LR
    | 対象ファイル | 禁止する import |
    |---|---|
    | `src/shared/**` | `hono`、`@hono/*`、`drizzle-orm*`、`react*`、`**/api/**`、`**/client/**` |
-   | `src/client/**` | `**/api/**`、`hono`、`@hono/*`、`drizzle-orm*` |
+   | `src/client/**` | `**/api/**`（`src/api/index.ts` からの型のみの import を除く）、`hono`（`hono/client` を除く）、`@hono/*`、`drizzle-orm*` |
    | `src/api/**` | `**/client/**`、`react*` |
    | `src/api/**` のうちリポジトリ層以外 | `drizzle-orm*` および DB クライアントモジュール（具体的なパスは `backend.md` で確定） |
 
+   client の例外（3.1）は、`@typescript-eslint/no-restricted-imports` の `allowTypeImports` を `src/api/index.ts` のパスに限って有効にして実現する。値としての import（`import { app }` 等）は引き続き禁止される。
    最後の行が `auth.md` 13章の「ハンドラから直接 Drizzle を呼ぶことを禁止する Lint」に相当する。**現時点では専用のカスタム ESLint ルールは作らず、`no-restricted-imports` で足りる**という方針とする。実装中に静的に検出したい規約が出てきた場合は、flat config にローカルルール（リポジトリ内のプラグイン）として追加してよい。追加の依存は不要だが、外部の `eslint-plugin-*` を導入する場合は `requirement.md` 6章への追記と 9.4 の許可リストの更新が必要になる。ただし「WHERE 句の中身が正しいか」は静的解析では保証できず、最終防御線は統合テスト（`test.md`）である（`auth.md` 13章の留意と同じ）。
    ルールが実際に違反を検出することは、実装フェーズ最初のタスクで、違反コードを一時的に書いて確認する。
 
@@ -205,9 +207,17 @@ flowchart LR
 
 ### 4.5 フロントへの型の渡し方
 
-- `client` は `shared` の `z.infer` 型を使い、薄い fetch ラッパ（`frontend.md`）で API を呼ぶ。追加の型生成ツールは使わない。
-- Hono RPC（`hc<AppType>`）は、`client` から `api` への（型のみでも）import を例外的に許す必要があり、3.1 の依存ルールに穴を開けるため採用しない。
-- `openapi-typescript` による型生成は、shared のスキーマとの二重管理になるため採用しない。
+- **API の呼び出しは Hono RPC（`hono/client` の `hc<AppType>`）で行う。** `src/api/index.ts` が Hono アプリの型を `export type AppType` として公開し、`client` はこれを `import type` で参照する（3.1 の唯一の例外）。パス・パラメータ・レスポンスの型がルート定義と自動で一致する。`hono/client` は `hono` パッケージに同梱されており、依存は増えない。
+- **`shared` のスキーマは引き続き必要である。** RPC で得られるのは型のみであり、UI のフォーム入力検証（実行時の Zod スキーマ）、API と UI で同一のエラー文言（`common-spec.md` 3章）、`fields` 変換、JST 日付ユーティリティは提供されないため。役割は次のとおり分担する。
+
+  | 用途 | 出所 |
+  |---|---|
+  | エンドポイントのパス・パラメータ・レスポンスの型 | Hono RPC（`AppType`） |
+  | フォームの入力検証・エラー文言・制約値 | `shared`（4.1） |
+
+- RPC の型が付くのは、ハンドラが `c.json()` で返すレスポンスである。middleware が返す共通エラー（401 等。`common-spec.md` 2章）には型が付かないため、`client` は `shared` のエラー型で扱う。ラッパの具体は `frontend.md` で確定する。
+- **成立性は実装フェーズ最初のタスクで確認する**（未解決事項）。確認項目は、`OpenAPIHono` のルートを chain で書く必要があるか、ルート数に対する型推論のコスト（IDE・`tsc`）、`client` の型チェックで `AppType` が参照する Workers 型（`D1Database` 等）を解決できるか（tsconfig の `references` の張り方を含む）の3点。成立しない場合は「`shared` の型＋薄い fetch ラッパ」に戻す。
+- `openapi-typescript` による型生成は採用しない。依存と生成手順が増え、`shared` の型と役割が重なるため。
 
 ## 5. Worker エントリポイントと wrangler 設定
 
@@ -501,4 +511,5 @@ Git 純正の pre-commit の一部として、LLM を呼ばないルールベー
 10. **pre-push の LLM レビュー**のプロンプト・出力形式・所要時間とコストの実測（実装フェーズ）。
 11. **要件整合性チェックの許可リスト**の初期内容（6章の技術名とパッケージ名の対応表）。
 12. **shared の素の Zod スキーマを `@hono/zod-openapi` の `createRoute` に渡せるか**（4.2）。実装フェーズ最初のタスクで確認する。
-13. `backend.md`・`frontend.md`・`test.md` へ引き継ぐ事項：リポジトリ層の内部構成と `userId` の必須化（`backend.md`）、種目シードの内容（`backend.md`）、統合テストの配置と CI での必須化・トリガー存在テスト・CHECK 制約の突合テスト・事前定義種目がある前提のテストデータ（`test.md`）。
+13. **Hono RPC の成立性**（4.5）：`OpenAPIHono` での chain の要否、型推論のコスト、`client` の型チェックでの Workers 型の解決。実装フェーズ最初のタスクで確認し、成立しない場合は「`shared` の型＋薄い fetch ラッパ」に戻す。
+14. `backend.md`・`frontend.md`・`test.md` へ引き継ぐ事項：リポジトリ層の内部構成と `userId` の必須化（`backend.md`）、種目シードの内容（`backend.md`）、統合テストの配置と CI での必須化・トリガー存在テスト・CHECK 制約の突合テスト・事前定義種目がある前提のテストデータ（`test.md`）。
