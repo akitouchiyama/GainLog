@@ -112,7 +112,16 @@ flowchart LR
 | `api` → `shared` | 可 | 同上 |
 | `shared` → `api` / `client` | **不可** | 共有コードが片側に依存すると、もう片側のバンドル・型環境を汚染する |
 | `api` ⇄ `client` | **不可**（`import type` も含む） | Hono RPC（`hc<AppType>`）は採用しない。境界に例外を作らない（4章） |
-| `shared` → `hono` / `@hono/*` / `drizzle-orm` / `react` / DOM・Workers 固有 API | **不可** | 純粋な TypeScript ＋ `zod` のみで書く |
+| `shared` → `hono` / `@hono/*` / `drizzle-orm` / `react` / DOM・Workers 固有 API | **不可** | 純粋な TypeScript ＋ `zod` のみで書く（理由は下記） |
+
+`shared` を純粋な TypeScript ＋ `zod` に限る理由は、api / client への依存を持たせないことに加えて次のとおりである。
+
+| 理由 | 内容 |
+|---|---|
+| クライアントのバンドル肥大の防止 | `shared` はブラウザ側にも同梱される。`hono`・`drizzle-orm` を import すると SPA のバンドルに混入しうる（FCP 3 秒の目標。`requirement.md` 6章） |
+| ランタイム非依存 | `shared` は workerd とブラウザの両方で動く必要がある。DOM・Workers 固有 API を使うと片側でしか動かない |
+| テスト容易性 | Workers 環境・DOM 環境なしに Node 環境でテストできる（6.3 の Vitest プロジェクト分割の前提） |
+| DB の形の漏れ防止 | Drizzle の型が `shared` に入ると、DB のカラム構造が UI の型に漏れ、API の形（camelCase）と DB の形が混ざる |
 
 `api` 内部の層（ルート → サービス → リポジトリ）の依存方向は `backend.md`、`client` 内部の構造は `frontend.md` で定める。
 
@@ -138,7 +147,7 @@ flowchart LR
    | `src/api/**` | `**/client/**`、`react*` |
    | `src/api/**` のうちリポジトリ層以外 | `drizzle-orm*` および DB クライアントモジュール（具体的なパスは `backend.md` で確定） |
 
-   最後の行が `auth.md` 13章の「ハンドラから直接 Drizzle を呼ぶことを禁止する Lint」に相当する。**専用のカスタム ESLint ルールは作らず、`no-restricted-imports` で足りる**という方針とする。ただし「WHERE 句の中身が正しいか」は静的解析では保証できず、最終防御線は統合テスト（`test.md`）である（`auth.md` 13章の留意と同じ）。
+   最後の行が `auth.md` 13章の「ハンドラから直接 Drizzle を呼ぶことを禁止する Lint」に相当する。**現時点では専用のカスタム ESLint ルールは作らず、`no-restricted-imports` で足りる**という方針とする。実装中に静的に検出したい規約が出てきた場合は、flat config にローカルルール（リポジトリ内のプラグイン）として追加してよい。追加の依存は不要だが、外部の `eslint-plugin-*` を導入する場合は `requirement.md` 6章への追記と 9.4 の許可リストの更新が必要になる。ただし「WHERE 句の中身が正しいか」は静的解析では保証できず、最終防御線は統合テスト（`test.md`）である（`auth.md` 13章の留意と同じ）。
    ルールが実際に違反を検出することは、実装フェーズ最初のタスクで、違反コードを一時的に書いて確認する。
 
 ### 3.3 パスエイリアス
