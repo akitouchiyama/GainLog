@@ -401,7 +401,7 @@ PRAGMA foreign_keys=ON;
 |---|---|---|---|---|
 | pre-commit | `git commit` | Lefthook | 決定論的・ブロッキング・LLM なし | 機密・禁止ファイルの混入防止、lint・format・型、要件整合性、migration 再作成ガード |
 | pre-push | `git push` | Lefthook ＋ `claude -p` | LLM レビュー・**Blocker 指摘のみブロック** | コーディング規約・セキュリティのレビュー |
-| CI（PR） | PR 作成・更新 | GitHub Actions | 決定論的・ブロッキング | lint・型・テスト・ビルド・gitleaks |
+| CI（PR） | PR 作成・更新 | GitHub Actions | 決定論的・ブロッキング | gitleaks を先頭で実行し、通過後に lint・型・テスト・ビルド |
 | CI/CD（main） | `main` へのマージ | GitHub Actions | 決定論的 | テスト → ビルド → マイグレーション → デプロイ（6.2） |
 
 「Git 管理すべきでないものの混入防止」は LLM エージェントではなく決定論的なスキャナの役割とし、pre-push の LLM レビューとは分ける。
@@ -445,7 +445,9 @@ Git 純正の pre-commit の一部として、LLM を呼ばないルールベー
 
 ### 9.5 CI（GitHub Actions）
 
-- **PR**: 依存インストール（`pnpm install --frozen-lockfile`）→ lint → 型チェック → テスト（Vitest）→ ビルド → gitleaks。`architecture.md` 6章が定める `main` マージ時のデプロイフローに加えて、PR 時にも同じ検査を行う（追従は12章）。
+- **PR**: 次の2段で実行する。`architecture.md` 6章が定める `main` マージ時のデプロイフローに加えて、PR 時にも検査を行う（追従は12章）。
+  1. **gitleaks ジョブ**（先頭・独立）: 依存のインストールもビルドも不要なため最初に実行する。PR のコミット範囲を検査するため checkout は `fetch-depth: 0` とする。gitleaks はバイナリを直接実行する（`gitleaks-action` v2 は Organization のリポジトリでライセンスキーを要するため、将来の移管に備えて依存しない）。
+  2. **検査ジョブ**（`needs: gitleaks`）: 依存インストール（`pnpm install --frozen-lockfile`）→ lint → 型チェック → テスト（Vitest）→ ビルド。gitleaks が検知した場合は実行されない。
 - **main**: テスト → ビルド → マイグレーション適用 → `wrangler deploy`（6.2）。テストが失敗した場合はデプロイを中断する。`wrangler deploy` が失敗した場合は、マイグレーションを再適用せずデプロイのみを再試行する（ADR-0004）。
 - PR の必須チェック化（Branch protection）は GitHub の設定であり、`CONTRIBUTING.md`（実装着手直前）で手順化する。
 
