@@ -8,9 +8,10 @@ info:
     画面設計書（screens.md）・認証設計書（auth.md）を基にした手書きのAPI設計であり、
     実装フェーズで @hono/zod-openapi を用いてHono側のルート定義（Zodスキーマ）へ
     手動でコード化する想定の設計ソースである（自動生成コードではない）。
+    本書は基本設計時点のスナップショットであり、実装後は追従させない（凍結）。
     実装後は、src/shared の Zod スキーマと src/api のルート定義が実行時の正本となり、
-    本書は設計ドキュメントとして、API を変更する PR で手動更新する
-    （docs/Design/Detailed/project-structure.md 4章、ADR-0008）。
+    本書の内容は実装と異なりうる。最新の API 仕様は @hono/zod-openapi でコードから生成する
+    （docs/Design/Detailed/project-structure.md 4.4、ADR-0008）。
 
     対象は要件定義書4章のPhase 1のみ。Phase 2機能（成長グラフ・目標設定・
     メニュー・allowlist管理画面）のエンドポイントは対象外とする。

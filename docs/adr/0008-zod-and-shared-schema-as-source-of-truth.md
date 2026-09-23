@@ -28,7 +28,7 @@
 - `src/shared` のスキーマ・型・制約値・メッセージ文言を、API・UI・Drizzle スキーマ（CHECK）の共通の出所（正本）とする。型は `z.infer` から得る。
 - shared のスキーマは素の `zod`（メタデータは Zod 4 の `.meta()`）で書き、`@hono/zod-openapi` を shared から import しない。`.openapi()` などの拡張は `src/api` 側でのみ適用する。
 - API の呼び出しは Hono RPC（`hc<AppType>`）で行い、`client` から `src/api/index.ts` の `AppType` を `import type` することだけを依存方向ルールの例外とする。RPC で得られるのは型のみのため、フォームの入力検証・エラー文言・制約値は引き続き shared を使う。成立性は実装フェーズ最初のタスクで確認し、成立しない場合は「shared の型 ＋ 薄い fetch ラッパ」に戻す。`openapi-typescript` は依存と生成手順が増え、shared と役割が重なるため採用しない。
-- `openapi.yaml` は基本設計時点の API 設計書として残し、API を変更する PR で手動更新する。
+- `openapi.yaml` は基本設計時点のスナップショットとして凍結し、実装後は追従させない。最新の API 仕様が必要な場合は `@hono/zod-openapi` でコードから生成する（生成の経路は `backend.md`）。
 
 詳細は `docs/Design/Detailed/project-structure.md` 4章。
 
@@ -38,4 +38,4 @@
 - Zod は Valibot よりバンドルが大きい。FCP 3 秒・Lighthouse 80（`requirement.md` 6章）への影響は、実装後に計測して判断する（必要なら `zod/mini` 等を検討）。
 - 一次情報で確認できた範囲: `@hono/zod-openapi` 1.6.3 は Zod ^4 が peer、`@asteasolutions/zod-to-openapi` は v8 以降（Zod 4）で `.meta()` に対応する。**shared の素のスキーマを `createRoute` にそのまま渡せることは、公式ドキュメントに明記がなく未確認**であり、実装フェーズ最初のタスクで確認する。成立しない場合も Zod 統一は維持し、api 側でのラップ方法を見直す。
 - `zod` は単一インスタンスに保つ（pnpm の peer 依存解決）。
-- 実装後に、`@hono/zod-openapi` の生成仕様と `openapi.yaml` の差分を CI で検知するかは別途検討する。
+- `openapi.yaml` を凍結するため、生成仕様との差分検知は行わない。基本設計書の他文書（`common-spec.md`・`screens.md`・`db.md`）からの `openapi.yaml` への参照は、基本設計時点の設計として読む。

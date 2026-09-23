@@ -149,7 +149,7 @@ flowchart LR
    | `src/api/**` のうちリポジトリ層以外 | `drizzle-orm*` および DB クライアントモジュール（具体的なパスは `backend.md` で確定） |
 
    client の例外（3.1）は、`@typescript-eslint/no-restricted-imports` の `allowTypeImports` を `src/api/index.ts` のパスに限って有効にして実現する。値としての import（`import { app }` 等）は引き続き禁止される。
-   最後の行が `auth.md` 13章の「ハンドラから直接 Drizzle を呼ぶことを禁止する Lint」に相当する。**現時点では専用のカスタム ESLint ルールは作らず、`no-restricted-imports` で足りる**という方針とする。実装中に静的に検出したい規約が出てきた場合は、flat config にローカルルール（リポジトリ内のプラグイン）として追加してよい。追加の依存は不要だが、外部の `eslint-plugin-*` を導入する場合は `requirement.md` 6章への追記と 9.4 の許可リストの更新が必要になる。ただし「WHERE 句の中身が正しいか」は静的解析では保証できず、最終防御線は統合テスト（`test.md`）である（`auth.md` 13章の留意と同じ）。
+   表の最後の行が `auth.md` 13章の「ハンドラから直接 Drizzle を呼ぶことを禁止する Lint」に相当する。**現時点では専用のカスタム ESLint ルールは作らず、`no-restricted-imports` で足りる**という方針とする。実装中に静的に検出したい規約が出てきた場合は、flat config にローカルルール（リポジトリ内のプラグイン）として追加してよい。追加の依存は不要だが、外部の `eslint-plugin-*` を導入する場合は `requirement.md` 6章への追記と 9.4 の許可リストの更新が必要になる。ただし「WHERE 句の中身が正しいか」は静的解析では保証できず、最終防御線は統合テスト（`test.md`）である（`auth.md` 13章の留意と同じ）。
    ルールが実際に違反を検出することは、実装フェーズ最初のタスクで、違反コードを一時的に書いて確認する。
 
 ### 3.3 パスエイリアス
@@ -202,8 +202,9 @@ flowchart LR
 ### 4.4 OpenAPI（`openapi.yaml`）の扱い
 
 - 実行時の正本は「shared の Zod スキーマ＋api のルート定義」とする。
-- `openapi.yaml` は基本設計時点の API 設計書として残す。**API を変更する PR では、同じ PR で `openapi.yaml` も手動で更新する。**
-- 実装後に `@hono/zod-openapi` の生成仕様と `openapi.yaml` の差分を CI で検知するかは、実装後に検討する（未解決事項）。
+- `openapi.yaml` は**基本設計時点のスナップショットとして凍結**し、実装後は追従させない。冒頭に「基本設計時点の設計であり、実装と異なりうる」旨を注記する。手動での追従は二重管理のコストが大きく、正本はコード側にあるため。
+- 実装後の最新の API 仕様が必要な場合は、`@hono/zod-openapi` の生成機能（`getOpenAPI31Document` 等）でコードから生成する。生成の経路（npm script でファイルに出力するか、エンドポイントとして公開するか）と、公開する場合の認証の扱いは `backend.md` で確定する。
+- 凍結により、`openapi.yaml` と生成仕様の差分検知は行わない。
 
 ### 4.5 フロントへの型の渡し方
 
@@ -483,7 +484,7 @@ Git 純正の pre-commit の一部として、LLM を呼ばないルールベー
 
 | 項目 | 既存記載 | 本書での扱い | 判定 |
 |---|---|---|---|
-| バリデーションライブラリ | `requirement.md` 6章（Zod・Valibot 併記）／`openapi.yaml`（`@hono/zod-openapi`）／ADR-0007（Valibot） | Zod に統一 | **追従修正が必要**：6章から Valibot を削除。ADR-0007 の「Valibot」を Zod に最小修正して ADR-0008 を参照。`openapi.yaml` 冒頭説明文に実装後の位置づけ（4.4）を追記 |
+| バリデーションライブラリ | `requirement.md` 6章（Zod・Valibot 併記）／`openapi.yaml`（`@hono/zod-openapi`）／ADR-0007（Valibot） | Zod に統一 | **追従修正が必要**：6章から Valibot を削除。ADR-0007 の「Valibot」を Zod に最小修正して ADR-0008 を参照。`openapi.yaml` 冒頭説明文に、基本設計時点のスナップショットとして凍結する旨（4.4）を追記 |
 | ローカル開発コマンド | `architecture.md` 1・4章、CLAUDE.md、ADR-0002 の「`wrangler dev`」 | Vite の開発サーバ（workerd 上で Worker を実行） | **追従修正が必要**：該当表記を更新。6章に Vite・`@cloudflare/vite-plugin` 等を追記 |
 | シード投入 | `architecture.md` 4章（`--local --file=./seed.sql`）／`db.md` 5.4・9章 | migration に含める（8.4） | **追従修正が必要**：`architecture.md` 4章の seed.sql 記述を更新。`db.md` 5.4・9章の参照を更新 |
 | CI の実行順・PR 検査 | `architecture.md` 6章（`main` マージ時のみ、ビルド工程の記載なし） | テスト → ビルド → マイグレーション → デプロイ。PR でも検査（6.2・9.5） | **追従修正が必要**：6章のシーケンスにビルドを追記し、PR 検査を追記 |
@@ -504,12 +505,11 @@ Git 純正の pre-commit の一部として、LLM を呼ばないルールベー
 3. **`.dev.vars` の Vite プラグインでの読み込み**と、シークレットの型付け方法（`wrangler types` の扱い）。実装フェーズ初期に確認する。
 4. **Storybook・Vitest から Cloudflare プラグインを除外する具体的な方法**（`frontend.md`・`test.md`）。
 5. **OAuth の redirect URI の導出方法**と、**`__Host-` Cookie の `http://localhost` での挙動**（`backend.md`・`CONTRIBUTING.md`）。
-6. **`openapi.yaml` と `@hono/zod-openapi` の生成仕様の差分検知**を CI に入れるか（実装後に検討）。
-7. **Zod のバンドルサイズ**が FCP・Lighthouse の目標に与える影響（実装後に計測。必要なら `zod/mini` 等を検討）。
-8. **`compatibility_date`・`compatibility_flags`（`nodejs_compat`）**（`backend.md`）。
-9. **drizzle-kit 1.0 の GA 後の移行**（マイグレーションの配置形式が変わる。8.1）。
-10. **pre-push の LLM レビュー**のプロンプト・出力形式・所要時間とコストの実測（実装フェーズ）。
-11. **要件整合性チェックの許可リスト**の初期内容（6章の技術名とパッケージ名の対応表）。
-12. **shared の素の Zod スキーマを `@hono/zod-openapi` の `createRoute` に渡せるか**（4.2）。実装フェーズ最初のタスクで確認する。
-13. **Hono RPC の成立性**（4.5）：`OpenAPIHono` での chain の要否、型推論のコスト、`client` の型チェックでの Workers 型の解決。実装フェーズ最初のタスクで確認し、成立しない場合は「`shared` の型＋薄い fetch ラッパ」に戻す。
-14. `backend.md`・`frontend.md`・`test.md` へ引き継ぐ事項：リポジトリ層の内部構成と `userId` の必須化（`backend.md`）、種目シードの内容（`backend.md`）、統合テストの配置と CI での必須化・トリガー存在テスト・CHECK 制約の突合テスト・事前定義種目がある前提のテストデータ（`test.md`）。
+6. **Zod のバンドルサイズ**が FCP・Lighthouse の目標に与える影響（実装後に計測。必要なら `zod/mini` 等を検討）。
+7. **`compatibility_date`・`compatibility_flags`（`nodejs_compat`）**（`backend.md`）。
+8. **drizzle-kit 1.0 の GA 後の移行**（マイグレーションの配置形式が変わる。8.1）。
+9. **pre-push の LLM レビュー**のプロンプト・出力形式・所要時間とコストの実測（実装フェーズ）。
+10. **要件整合性チェックの許可リスト**の初期内容（6章の技術名とパッケージ名の対応表）。
+11. **shared の素の Zod スキーマを `@hono/zod-openapi` の `createRoute` に渡せるか**（4.2）。実装フェーズ最初のタスクで確認する。
+12. **Hono RPC の成立性**（4.5）：`OpenAPIHono` での chain の要否、型推論のコスト、`client` の型チェックでの Workers 型の解決。実装フェーズ最初のタスクで確認し、成立しない場合は「`shared` の型＋薄い fetch ラッパ」に戻す。
+13. `backend.md`・`frontend.md`・`test.md` へ引き継ぐ事項：リポジトリ層の内部構成と `userId` の必須化（`backend.md`）、種目シードの内容（`backend.md`）、OpenAPI 仕様の生成経路（`backend.md`。4.4）、RPC クライアントのラッパと共通エラーの扱い（`frontend.md`。4.5）、統合テストの配置と CI での必須化・トリガー存在テスト・CHECK 制約の突合テスト・事前定義種目がある前提のテストデータ（`test.md`）。
