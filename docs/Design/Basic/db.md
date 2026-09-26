@@ -192,7 +192,7 @@ Googleアカウントに紐づく内部ユーザー情報。JITプロビジョ�
 
 - `owner_user_id` がNULLの行（事前定義データ）は全ユーザーが閲覧可能・編集不可、`NOT NULL`の行はその`owner_user_id`が所有者本人のみ編集・削除可能とする（auth.md 8章、requirement.md 5.5）。
 - `UNIQUE(owner_user_id, name)` により、同一ユーザー内での種目名重複を防止する。ただし SQLite の UNIQUE 制約は NULL 同士を区別する（`NULL != NULL` として扱われる）ため、**事前定義種目（`owner_user_id` が NULL）同士の名前重複はこの制約では防げない**。事前定義種目の重複防止は、シードを含むマイグレーションの内容とテストで担保する（`docs/Design/Detailed/project-structure.md` 8.4）。
-- 事前定義種目の初期データは、マイグレーション（`drizzle-kit generate --custom` で作成する SQL）に含めて投入する（`docs/Design/Detailed/project-structure.md` 8.4、ADR-0011）。具体的なシードデータ内容は9章のスコープ外（`backend.md` で確定する）。
+- 事前定義種目の初期データは、マイグレーション（`drizzle-kit generate --custom` で作成する SQL）に含めて投入する（`docs/Design/Detailed/project-structure.md` 8.4、ADR-0011）。具体的なシードデータ内容は9章のスコープ外（`docs/Design/Detailed/backend.md` 12章で確定済み）。
 - `category` の `CHECK` 制約は、Drizzle の `text('category', { enum })` では DB に生成されない（TypeScript の型が絞られるだけ）ため、`check()` で明示的に定義する（`docs/Design/Detailed/project-structure.md` 4.3）。
 
 ### 5.5 workout_records
@@ -354,7 +354,7 @@ WHERE wr.user_id = :userId
 - 実際のDrizzle ORMスキーマコード（TypeScript）による実装
 - Phase 2機能（`menus`等）の詳細スキーマ。Phase 2着手時に別途本書を拡張する
 - allowlistのGUI管理機能（Phase 2）のスキーマ変更（要件定義書5.12参照）
-- シードデータ（事前定義種目一覧等）の具体的な内容（配置・投入経路は `docs/Design/Detailed/project-structure.md` 8.4、内容は `backend.md` で確定する）
+- シードデータ（事前定義種目一覧等）の具体的な内容（配置・投入経路は `docs/Design/Detailed/project-structure.md` 8.4、内容は `docs/Design/Detailed/backend.md` 12章で確定済み）
 - ユーザー削除機能（`users` 行の削除、およびそれに伴う記録データの一括削除）。Phase 1 では提供しない。緊急のアクセス遮断は allowlist からの削除＋該当 `user_id` の `sessions` 行削除で対応する（`auth.md` 4章）。`user_id` 系 FK の `ON DELETE CASCADE` 定義は Phase 2 のユーザー削除に備えた設計であり、Phase 1 で `DELETE FROM users` を実行する運用は想定しない。CASCADE / RESTRICT の相互作用の詳細は10章 未解決事項1を参照
 
 ## 10. 整合性チェック結果・未解決事項
