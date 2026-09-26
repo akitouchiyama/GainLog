@@ -340,13 +340,13 @@ export default defineConfig({
 | `DB` | D1 バインディング | `.wrangler/state` 内のローカル D1 | Cloudflare D1 | 5.3 |
 | `GOOGLE_CLIENT_ID` | シークレット | `.dev.vars` | `wrangler secret put` | OAuth クライアント ID（`architecture.md` 8章の方針どおりシークレットとして管理） |
 | `GOOGLE_CLIENT_SECRET` | シークレット | `.dev.vars` | `wrangler secret put` | OAuth クライアントシークレット |
-| `LOG_LEVEL` | 変数（`vars`） | `.dev.vars`（`debug` 可） | `wrangler.jsonc` の `vars`（`info`） | `common-spec.md` 4章の「本番では debug を出力しない」の制御。名前・値の意味は `backend.md`（ロギング）で確定 |
+| `LOG_LEVEL` | 変数（`vars`） | `.dev.vars`（`debug` 可） | `wrangler.jsonc` の `vars`（`info`） | `common-spec.md` 4章の「本番では debug を出力しない」の制御。名前・値の意味は `backend.md` 10章で確定済み |
 
-- OAuth の redirect URI は完全一致が必要（`architecture.md` 5章）で、ローカル（Vite 開発サーバの origin）と本番（`*.workers.dev`）で異なる。ローカル用の redirect URI も Google Cloud Console に登録する必要がある。**redirect URI をリクエストの origin から導出するか、変数で持つかは `backend.md`（認証実装）で確定する**。登録手順は運用手順書のスコープ（`auth.md` 12章）。
+- OAuth の redirect URI は完全一致が必要（`architecture.md` 5章）で、ローカル（Vite 開発サーバの origin）と本番（`*.workers.dev`）で異なる。ローカル用の redirect URI も Google Cloud Console に登録する必要がある。**redirect URI はリクエストの origin から導出する方式に確定済み**（`backend.md` 5.3）。登録手順は運用手順書のスコープ（`auth.md` 12章）。
 - `.dev.vars.example` にキー名のみを列挙してコミットし、`.dev.vars` は Git 管理しない（2.2）。
 - **CI（GitHub Actions）**: Cloudflare API token を GitHub Secrets に置く（`architecture.md` 6・8章）。Wrangler が対象アカウントを特定するため、`CLOUDFLARE_ACCOUNT_ID` も必要になる見込みで、これは機密ではないため GitHub の Variables に置く（`architecture.md` 8章への追記事項。12章）。アプリのシークレットは CI に渡さない方針は変わらない。
 - **型**: `Env` の型は `wrangler types` で生成し（Git 管理しない）、`postinstall` と `typecheck` で再生成する。シークレット（`wrangler.jsonc` に現れない値）の型付け方法は実装時に確定する（未解決事項）。
-- ローカル開発で `__Host-` プレフィックスの Cookie（`Secure` 必須）が `http://localhost` で受理されるかはブラウザ依存の可能性があり、未確認である（未解決事項。`backend.md`（認証実装）・`CONTRIBUTING.md` で扱う）。
+- ローカル開発で `__Host-` プレフィックスの Cookie（`Secure` 必須）が `http://localhost` で受理されるかはブラウザ依存の可能性があり、未確認である（未解決事項。`CONTRIBUTING.md` で扱う。`backend.md` は Cookie 属性自体は 5章で定めるが、この挙動確認は対象としていない）。
 
 ## 8. マイグレーション・シード配置
 
@@ -422,7 +422,7 @@ PRAGMA foreign_keys=ON;
 - 事前定義種目の `INSERT`（`owner_user_id` は NULL、UUID は SQL リテラルの固定値）を、`--custom` の migration として管理する。本番・ローカル・テストが同一経路で投入され、CI の既存工程（`migrations apply`）だけで本番に反映される。
 - 事前定義種目の名前重複は `db.md` 5.4 の `UNIQUE(owner_user_id, name)` では防げない（NULL 同士は区別されるため）。migration の内容で重複させないこと、および重複がないことをテストで確認する（`test.md`）。
 - 種目を追加する場合は新しい custom migration を追加する。変更・削除は、使用中の種目が `ON DELETE RESTRICT` で削除できない点に注意する。
-- 種目リストの内容（名称・カテゴリ・UUID）は `backend.md` 9章で確定する。
+- 種目リストの内容（名称・カテゴリ・UUID）は `backend.md` 12章で確定済み。
 - `architecture.md` 4章の `wrangler d1 execute --local --file=./seed.sql` は廃止する（12章）。
 - テストでは、migration の適用後に事前定義種目が入っている状態がベースになる（`test.md` に引き継ぐ）。
 
