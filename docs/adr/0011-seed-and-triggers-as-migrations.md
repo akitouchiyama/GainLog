@@ -20,7 +20,7 @@
 
 ## Decision
 
-- **シード**: 案 A。事前定義種目の `INSERT`（`owner_user_id` は NULL、UUID は固定リテラル）を `drizzle-kit generate --custom` で作成する migration として管理する。`seed.sql` は廃止する。種目リストの内容は `backend.md` で確定する。
+- **シード**: 案 A。事前定義種目の `INSERT`（`owner_user_id` は NULL、UUID は固定リテラル）を `drizzle-kit generate --custom` で作成する migration として管理する。`seed.sql` は廃止する。種目リストの内容は `docs/Design/Detailed/backend.md` 12章で確定済み。
 - **トリガー**: `db.md` 7章の DDL を、`--custom` で作成した migration として追記型（append-only）で管理する。
 - **テーブル再作成の規約**: drizzle-kit は CHECK 制約の変更などに対して、`PRAGMA foreign_keys=OFF` → 新テーブル作成 → `DROP TABLE` → RENAME という再作成 SQL を生成する（drizzle-kit 0.31.10 で実測）。これにより次のリスクがある。
   - `DROP TABLE` でトリガーが消える → 再作成を含む migration では、末尾でトリガーを再作成し、適用後にトリガーが存在することをテストで確認する。

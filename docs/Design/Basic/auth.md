@@ -91,7 +91,7 @@ sequenceDiagram
 
 - state 値は検証に使用した時点で D1 または一時 Cookie 上から消費・無効化し、同一 state を使ったリプレイ攻撃を防ぐ（ワンタイム利用）。
 - ID トークン検証は署名（JWKS）・issuer・audience・有効期限（exp）・nonce に加え、`email_verified` クレームが `true` であることも必須条件とする。未検証のメールアドレスでの登録を防ぐため。
-- ID トークン検証に用いるライブラリ（JWKS 取得・キャッシュ方式含む）の選定は実装時に定めるものとし、本書のスコープ外とする。
+- ID トークン検証に用いるライブラリ（JWKS 取得・キャッシュ方式含む）の選定は実装時に定めるものとし、本書のスコープ外とする（`docs/Design/Detailed/backend.md` 5.1 で `jose` に確定。ADR-0014）。
 
 ## 4. allowlistの設計
 
@@ -266,9 +266,9 @@ D1（SQLiteベース）にはPostgreSQLのようなDBエンジン側のRow Level
 
 ### 詳細設計で確定すべき項目一覧
 
-- [ ] リポジトリ層のディレクトリ構成・命名規則（`src/api` 配下に置く。`docs/Design/Detailed/project-structure.md` 2章。内部の構成・命名は `backend.md` で確定する）
-- [ ] リポジトリ関数のシグネチャ規約（`userId`を第一引数に固定する等）
-- [ ] ハンドラから直接Drizzleクエリを呼び出すことを禁止するLintルールの要否・具体的な実装方法（方式は確定：ESLint の `no-restricted-imports` をディレクトリ別に設定し、カスタムルールは作らない。`docs/Design/Detailed/project-structure.md` 3.2。禁止の対象パスは `backend.md` で確定する）
-- [ ] 所有者チェック対象リソース一覧（`WorkoutRecord`・`WorkoutSet`・ユーザー追加`Exercise`等）の網羅的な洗い出し
-- [ ] 事前定義データ（`owner_user_id`がnull、8章の例外ケース）に対する分岐処理をリポジトリ層でどう表現するか
-- [ ] 統合テストの配置・命名規約、およびCIでの実行必須化の要否
+- [x] リポジトリ層のディレクトリ構成・命名規則（`src/api` 配下に置く。`docs/Design/Detailed/project-structure.md` 2章。内部はオニオンアーキテクチャの `infrastructure/repositories/` に確定。`docs/Design/Detailed/backend.md` 2章、ADR-0013）
+- [x] リポジトリ関数のシグネチャ規約（`userId`を第一引数に固定。例外は `docs/Design/Detailed/backend.md` 6.1）
+- [x] ハンドラから直接Drizzleクエリを呼び出すことを禁止するLintルールの要否・具体的な実装方法（ESLint の `no-restricted-imports` を層ごとに設定。`infrastructure/**` 以外での `drizzle-orm*` 禁止。`docs/Design/Detailed/backend.md` 2.4）
+- [x] 所有者チェック対象リソース一覧（`docs/Design/Detailed/backend.md` 6.2 で網羅）
+- [x] 事前定義データ（`owner_user_id`がnull、8章の例外ケース）に対する分岐処理（404/403の使い分け。`docs/Design/Detailed/backend.md` 6.3）
+- [ ] 統合テストの配置・命名規約、およびCIでの実行必須化の要否（`test.md` で確定する）
