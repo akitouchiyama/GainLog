@@ -27,4 +27,4 @@
 
 - 開発時のプロキシ・CORS 設定が不要で、同一オリジン前提の認証（`__Host-` Cookie）を開発時にも再現できる。
 - **既知の懸念**: `@cloudflare/vite-plugin` 1.54.0 で、`wrangler d1 migrations apply --local` の後に `vite dev` を起動すると D1 が古いスキーマを読む不具合が報告されている（workers-sdk#15362、未 triage）。実装フェーズ最初のタスクで再現を確認し、再現する場合は案 B を再検討する。
-- Storybook と Vitest（client・shared）が Worker 用プラグインを読み込まないよう、設定を分離する規約を置く（具体的な方法は `frontend.md`・`test.md`）。
+- Storybook と Vitest（client・shared）が Worker 用プラグインを読み込まないよう、設定を分離する規約を置く。Storybook 側の具体的な方法は `docs/Design/Detailed/frontend.md` 12.2 章で確定済み（`.storybook/main.ts` の `viteFinal` でプラグインを除外）。Vitest 側は `test.md` で確定する。

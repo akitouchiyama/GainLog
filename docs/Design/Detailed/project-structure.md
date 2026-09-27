@@ -44,7 +44,7 @@
 | パッケージマネージャ | pnpm | – | |
 | コンテナ | Podman ＋ podman-compose（Containerfile / Compose Spec） | 開発機で Podman 4.9.3・podman-compose を確認 | npm 依存ではない。ビルド成果物の確認用（6.4） |
 
-React Router・サーバー状態管理・ID token 検証ライブラリ・Tailwind の版・テスト用ライブラリは、それぞれ `frontend.md` / `backend.md` / `test.md` で選定し、その PR で 6章へ追記する。
+ID token 検証ライブラリは `backend.md` 5.1 章で `jose` に確定済み（ADR-0014）。React Router・サーバー状態管理（TanStack Query）・Tailwind の版は `frontend.md` 1章で確定済み（ADR-0015）。テスト用ライブラリは `test.md` で選定し、その PR で 6章へ追記する。
 
 ## 2. ディレクトリ構成と責務
 
@@ -65,7 +65,9 @@ GainLog/
 │   └── hooks/                # Git フックから呼ぶ決定論チェック（Node 標準のみ。9章）
 ├── docs/                     # 要件・設計書・ADR
 ├── .github/workflows/        # CI/CD（9章。実体は実装フェーズ最初のタスク）
-├── .storybook/               # Storybook 設定（frontend.md で確定）
+├── .storybook/               # Storybook 設定（frontend.md 12章で確定）
+├── public/
+│   └── _headers               # 静的アセット応答への CSP 付与（frontend.md 13.2章）
 ├── index.html                # Vite のクライアントエントリ（リポジトリ直下）
 ├── wrangler.jsonc            # Worker・Static Assets・D1 の設定（5章）
 ├── vite.config.ts            # Vite ＋ Cloudflare プラグイン（6章）
@@ -83,7 +85,7 @@ GainLog/
 └── CLAUDE.md / README.md     # CONTRIBUTING.md は実装着手直前に追加（ADR-0003）
 ```
 
-- 本書で固定するのはトップレベルと、他の章の契約に関わる次の箇所のみである。`src/api` の内部（オニオン構成のレイヤー・ディレクトリ）は `backend.md` 2章、`src/client` の内部は `frontend.md` で確定する。
+- 本書で固定するのはトップレベルと、他の章の契約に関わる次の箇所のみである。`src/api` の内部（オニオン構成のレイヤー・ディレクトリ）は `backend.md` 2章、`src/client` の内部は `frontend.md` 2章で確定した（機能別ディレクトリ構成）。
   - `src/api/index.ts`（Worker エントリ）
   - `src/api/infrastructure/db/schema.ts`（Drizzle スキーマ。`drizzle.config.ts` が参照する。パスは `backend.md` 2.3 で確定）
   - `src/shared/`（4章）
@@ -129,7 +131,7 @@ flowchart LR
 | テスト容易性 | Workers 環境・DOM 環境なしに Node 環境でテストできる（6.3 の Vitest プロジェクト分割の前提） |
 | DB の形の漏れ防止 | Drizzle の型が `shared` に入ると、DB のカラム構造が UI の型に漏れ、API の形（camelCase）と DB の形が混ざる |
 
-`api` 内部の層（オニオンアーキテクチャ。ADR-0013）の依存方向は `backend.md` 2章、`client` 内部の構造は `frontend.md` で定める。
+`api` 内部の層（オニオンアーキテクチャ。ADR-0013）の依存方向は `backend.md` 2章、`client` 内部の構造は `frontend.md` 2.3 章で定めた。
 
 ### 3.2 強制方法
 
@@ -152,6 +154,7 @@ flowchart LR
    | `src/client/**` | `**/api/**`（`src/api/index.ts` からの型のみの import を除く）、`hono`（`hono/client` を除く）、`@hono/*`、`drizzle-orm*` |
    | `src/api/**` | `**/client/**`、`react*` |
    | `src/api/**` の層ごとの追加ルール | `backend.md` 2.4（`domain`/`application` から `drizzle-orm*`・`jose`・`infrastructure`・`interface` を禁止 等、オニオン構成の依存方向） |
+   | `src/client/**` の内部ディレクトリごとの追加ルール | `frontend.md` 2.3（`components/ui`・`lib` から `features`/`pages` を禁止、`features` 間は `exercises → records` の一方向のみ許可 等） |
 
    client の例外（3.1）は、`@typescript-eslint/no-restricted-imports` の `allowTypeImports` を `src/api/index.ts` のパスに限って有効にして実現する。値としての import（`import { app }` 等）は引き続き禁止される。
    表の最後の行が `auth.md` 13章の「ハンドラから直接 Drizzle を呼ぶことを禁止する Lint」に相当する（`backend.md` 2.4 で「`infrastructure/**` 以外での `drizzle-orm*` 禁止」として具体化）。**現時点では専用のカスタム ESLint ルールは作らず、`no-restricted-imports` で足りる**という方針とする。実装中に静的に検出したい規約が出てきた場合は、flat config にローカルルール（リポジトリ内のプラグイン）として追加してよい。追加の依存は不要だが、外部の `eslint-plugin-*` を導入する場合は `requirement.md` 6章への追記と 9.4 の許可リストの更新が必要になる。ただし「WHERE 句の中身が正しいか」は静的解析では保証できず、最終防御線は統合テスト（`test.md`）である（`auth.md` 13章の留意と同じ）。
@@ -221,7 +224,7 @@ flowchart LR
   | エンドポイントのパス・パラメータ・レスポンスの型 | Hono RPC（`AppType`） |
   | フォームの入力検証・エラー文言・制約値 | `shared`（4.1） |
 
-- RPC の型が付くのは、ハンドラが `c.json()` で返すレスポンスである。middleware が返す共通エラー（401 等。`common-spec.md` 2章）には型が付かないため、`client` は `shared` のエラー型で扱う。ラッパの具体は `frontend.md` で確定する。
+- RPC の型が付くのは、ハンドラが `c.json()` で返すレスポンスである。middleware が返す共通エラー（401 等。`common-spec.md` 2章）には型が付かないため、`client` は `shared` のエラー型で扱う。ラッパの具体は `frontend.md` 4章で確定した（非 2xx レスポンスを `ApiError` へ正規化する薄い関数）。
 - **成立性は実装フェーズ最初のタスクで確認する**（未解決事項）。確認項目は、`OpenAPIHono` のルートを chain で書く必要があるか、ルート数に対する型推論のコスト（IDE・`tsc`）、`client` の型チェックで `AppType` が参照する Workers 型（`D1Database` 等）を解決できるか（tsconfig の `references` の張り方を含む）の3点。成立しない場合は「`shared` の型＋薄い fetch ラッパ」に戻す。
 - `openapi-typescript` による型生成は採用しない。依存と生成手順が増え、`shared` の型と役割が重なるため。
 
@@ -301,7 +304,7 @@ export default defineConfig({
 
 - 型チェックは `tsc -b`（3.2 の tsconfig 分割）。`wrangler types` の生成物を含む。
 - Vitest はルートの `vitest.config.ts` で **api／client／shared の 3 プロジェクトに分ける**（Workers 環境・DOM 環境・Node 環境）。使用するプールやライブラリは `test.md` で確定する。
-- **規約**: `@cloudflare/vite-plugin` は `vite.config.ts` にのみ含め、Storybook と Vitest（client・shared）が Worker 用プラグインを読み込まない設定にする。具体的な分離方法は `frontend.md`（Storybook）・`test.md`（Vitest）で確定する。
+- **規約**: `@cloudflare/vite-plugin` は `vite.config.ts` にのみ含め、Storybook と Vitest（client・shared）が Worker 用プラグインを読み込まない設定にする。Storybook 側の具体的な分離方法は `frontend.md` 12.2 章で確定済み（`.storybook/main.ts` の `viteFinal` フックでプラグイン名 `vite-plugin-cloudflare` を除外する）。Vitest 側は `test.md` で確定する。
 
 ### 6.4 開発環境とコンテナでのビルド成果物確認（ADR-0012）
 
@@ -505,7 +508,7 @@ Git 純正の pre-commit の一部として、LLM を呼ばないルールベー
 | `lint` / `format` / `format:check` | ESLint / Prettier |
 | `test` | `vitest run`（詳細は `test.md`） |
 | `db:generate` / `db:migrate:local` / `db:reset:local` | 8.2 |
-| `storybook` / `storybook:build` | `frontend.md` で確定 |
+| `storybook` / `storybook:build` | `frontend.md` 12.3 章で確定 |
 | `container:up` / `container:down` | `podman-compose up --build` / `podman-compose down`（6.4） |
 
 - 本番デプロイ用の script は設けない。正規経路は CI のみとする（`architecture.md` 6章。ローカルからの `wrangler deploy` は動作確認用途で常用しない）。
@@ -543,7 +546,7 @@ Git 純正の pre-commit の一部として、LLM を呼ばないルールベー
 1. **`@cloudflare/vite-plugin` と D1 のスキーマ読み取り**（workers-sdk#15362）の再現確認。再現する場合は、Vite ＋ `wrangler dev` の二段構成を再検討する。実装フェーズ最初のタスク。
 2. **D1 上でのテーブル再作成の実挙動**（`PRAGMA foreign_keys=OFF` を含む migration が Wrangler の適用でどう扱われるか、親テーブル再作成時に子行が消えるか）。実 D1（ローカル）での実測が必要。実装フェーズ初期。
 3. **`.dev.vars` の Vite プラグインでの読み込み**と、シークレットの型付け方法（`wrangler types` の扱い）。実装フェーズ初期に確認する。
-4. **Storybook・Vitest から Cloudflare プラグインを除外する具体的な方法**（`frontend.md`・`test.md`）。
+4. **Vitest（client・shared）から Cloudflare プラグインを除外する具体的な方法**（`test.md`）。Storybook 側は `frontend.md` 12.2 章で確定済み。
 5. **OAuth の redirect URI の導出方法（確定済み：リクエストの origin から導出。`backend.md` 5.3）**と、残る **`__Host-` Cookie の `http://localhost` での挙動**（`CONTRIBUTING.md`）。
 6. **Zod のバンドルサイズ**が FCP・Lighthouse の目標に与える影響（実装後に計測。必要なら `zod/mini` 等を検討）。
 7. **`compatibility_date`・`compatibility_flags`（`nodejs_compat`）**：`jose`・`crypto.subtle` は標準 Web API のみで完結する見込み（`backend.md` 13章）。実装フェーズ最初のタスクで確定する。
@@ -553,4 +556,4 @@ Git 純正の pre-commit の一部として、LLM を呼ばないルールベー
 11. **shared の素の Zod スキーマを `@hono/zod-openapi` の `createRoute` に渡せるか**（4.2）。実装フェーズ最初のタスクで確認する。
 12. **Hono RPC の成立性**（4.5）：`OpenAPIHono` での chain の要否は一次情報で確認し**必須と確定した**（`backend.md` 3.1）。残るのは型推論のコスト、`client` の型チェックでの Workers 型の解決。実装フェーズ最初のタスクで確認し、成立しない場合は「`shared` の型＋薄い fetch ラッパ」に戻す。
 13. **コンテナでのビルド成果物確認**（6.4）：`vite preview` が `.dev.vars` を読み込むか、rootless Podman の警告（`/` が shared mount でない）の影響、GitHub Actions のランナーでの Podman の利用可否。実装フェーズ最初のタスクで確認する。
-14. `backend.md`・`frontend.md`・`test.md` へ引き継ぐ事項：リポジトリ層の内部構成と `userId` の必須化・種目シードの内容・OpenAPI 仕様の生成経路は `backend.md` で確定済み。RPC クライアントのラッパと共通エラーの扱い（`frontend.md`。4.5）、統合テストの配置と CI での必須化・トリガー存在テスト・CHECK 制約の突合テスト・事前定義種目がある前提のテストデータ（`test.md`）は引き続き未確定。
+14. `backend.md`・`frontend.md`・`test.md` へ引き継ぐ事項：リポジトリ層の内部構成と `userId` の必須化・種目シードの内容・OpenAPI 仕様の生成経路は `backend.md` で確定済み。RPC クライアントのラッパと共通エラーの扱いは `frontend.md` 4章で確定済み。統合テストの配置と CI での必須化・トリガー存在テスト・CHECK 制約の突合テスト・事前定義種目がある前提のテストデータ（`test.md`）は引き続き未確定。
