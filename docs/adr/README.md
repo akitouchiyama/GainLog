@@ -46,3 +46,5 @@ GainLog における設計上の重要な判断を、背景・決定・結果と
 | [0012](0012-container-for-build-verification.md) | 開発は WSL 上で行い、ビルド成果物の確認に Podman のコンテナを使う | Accepted |
 | [0013](0013-onion-architecture-for-api.md) | `src/api` の内部構成にオニオンアーキテクチャを採用する | Accepted |
 | [0014](0014-jose-for-id-token-verification.md) | ID トークンの検証に `jose` を採用する | Accepted |
+| [0015](0015-react-router-and-tanstack-query.md) | SPA のルーティングとサーバー状態管理に React Router と TanStack Query を採用する | Accepted |
+| [0016](0016-record-editor-immediate-save.md) | 記録画面は操作ごとの即時保存とする | Accepted |
