@@ -52,7 +52,7 @@ flowchart LR
 - ローカル D1 の運用は以下のコマンドで行う。
   - 初期化・マイグレーション適用: `wrangler d1 migrations apply <DB_NAME> --local`
   - リセット: ローカル DB ファイル（`.wrangler/state` 配下）を削除し、再度マイグレーションを適用する
-  - シード投入: 事前定義種目のシードはマイグレーションに含めて管理する（`docs/Design/Detailed/project-structure.md` 8.4、ADR-0011）。ローカルでは上記のマイグレーション適用で投入され、本番も CI のマイグレーション適用（7章）で投入される。シードデータの内容は詳細設計（`backend.md`）で定める。
+  - シード投入: 事前定義種目のシードはマイグレーションに含めて管理する（`docs/Design/Detailed/project-structure.md` 8.4、ADR-0011）。ローカルでは上記のマイグレーション適用で投入され、本番も CI のマイグレーション適用（7章）で投入される。シードデータの内容は詳細設計（`docs/Design/Detailed/backend.md` 12章）で確定済み。
 
 ## 5. ドメイン構成
 

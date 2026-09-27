@@ -53,10 +53,10 @@ React Router・サーバー状態管理・ID token 検証ライブラリ・Tailw
 ```
 GainLog/
 ├── src/
-│   ├── api/                  # Worker（Hono）。/api/* の全処理
+│   ├── api/                  # Worker（Hono）。/api/* の全処理。内部はオニオン構成（backend.md 2章、ADR-0013）
 │   │   ├── index.ts          # Worker エントリポイント（wrangler の main）
-│   │   └── db/
-│   │       └── schema.ts     # Drizzle スキーマ（drizzle-kit の入力）
+│   │   └── infrastructure/db/
+│   │       └── schema.ts     # Drizzle スキーマ（drizzle-kit の入力。backend.md 2.3 で src/api/db/ から移設）
 │   ├── client/               # React SPA
 │   │   └── main.tsx          # SPA エントリ（index.html から読み込む）
 │   └── shared/               # api / client 共有コード（4章）
@@ -83,9 +83,9 @@ GainLog/
 └── CLAUDE.md / README.md     # CONTRIBUTING.md は実装着手直前に追加（ADR-0003）
 ```
 
-- 本書で固定するのはトップレベルと、他の章の契約に関わる次の箇所のみである。`src/api` の内部（ルート・ミドルウェア・サービス・リポジトリ等）は `backend.md`、`src/client` の内部は `frontend.md` で確定する。
+- 本書で固定するのはトップレベルと、他の章の契約に関わる次の箇所のみである。`src/api` の内部（オニオン構成のレイヤー・ディレクトリ）は `backend.md` 2章、`src/client` の内部は `frontend.md` で確定する。
   - `src/api/index.ts`（Worker エントリ）
-  - `src/api/db/schema.ts`（Drizzle スキーマ。`drizzle.config.ts` が参照する）
+  - `src/api/infrastructure/db/schema.ts`（Drizzle スキーマ。`drizzle.config.ts` が参照する。パスは `backend.md` 2.3 で確定）
   - `src/shared/`（4章）
 - テストファイルは対象の隣に `*.test.ts(x)` として置く方針を暫定とし、`test.md` で確定する。
 - `index.html` をリポジトリ直下に置くのは、`@cloudflare/vite-plugin` が「プロジェクト直下の `index.html`」をクライアント環境のビルド対象とみなすためである（公式ドキュメント）。
@@ -129,7 +129,7 @@ flowchart LR
 | テスト容易性 | Workers 環境・DOM 環境なしに Node 環境でテストできる（6.3 の Vitest プロジェクト分割の前提） |
 | DB の形の漏れ防止 | Drizzle の型が `shared` に入ると、DB のカラム構造が UI の型に漏れ、API の形（camelCase）と DB の形が混ざる |
 
-`api` 内部の層（ルート → サービス → リポジトリ）の依存方向は `backend.md`、`client` 内部の構造は `frontend.md` で定める。
+`api` 内部の層（オニオンアーキテクチャ。ADR-0013）の依存方向は `backend.md` 2章、`client` 内部の構造は `frontend.md` で定める。
 
 ### 3.2 強制方法
 
@@ -151,16 +151,16 @@ flowchart LR
    | `src/shared/**` | `hono`、`@hono/*`、`drizzle-orm*`、`react*`、`**/api/**`、`**/client/**` |
    | `src/client/**` | `**/api/**`（`src/api/index.ts` からの型のみの import を除く）、`hono`（`hono/client` を除く）、`@hono/*`、`drizzle-orm*` |
    | `src/api/**` | `**/client/**`、`react*` |
-   | `src/api/**` のうちリポジトリ層以外 | `drizzle-orm*` および DB クライアントモジュール（具体的なパスは `backend.md` で確定） |
+   | `src/api/**` の層ごとの追加ルール | `backend.md` 2.4（`domain`/`application` から `drizzle-orm*`・`jose`・`infrastructure`・`interface` を禁止 等、オニオン構成の依存方向） |
 
    client の例外（3.1）は、`@typescript-eslint/no-restricted-imports` の `allowTypeImports` を `src/api/index.ts` のパスに限って有効にして実現する。値としての import（`import { app }` 等）は引き続き禁止される。
-   表の最後の行が `auth.md` 13章の「ハンドラから直接 Drizzle を呼ぶことを禁止する Lint」に相当する。**現時点では専用のカスタム ESLint ルールは作らず、`no-restricted-imports` で足りる**という方針とする。実装中に静的に検出したい規約が出てきた場合は、flat config にローカルルール（リポジトリ内のプラグイン）として追加してよい。追加の依存は不要だが、外部の `eslint-plugin-*` を導入する場合は `requirement.md` 6章への追記と 9.4 の許可リストの更新が必要になる。ただし「WHERE 句の中身が正しいか」は静的解析では保証できず、最終防御線は統合テスト（`test.md`）である（`auth.md` 13章の留意と同じ）。
+   表の最後の行が `auth.md` 13章の「ハンドラから直接 Drizzle を呼ぶことを禁止する Lint」に相当する（`backend.md` 2.4 で「`infrastructure/**` 以外での `drizzle-orm*` 禁止」として具体化）。**現時点では専用のカスタム ESLint ルールは作らず、`no-restricted-imports` で足りる**という方針とする。実装中に静的に検出したい規約が出てきた場合は、flat config にローカルルール（リポジトリ内のプラグイン）として追加してよい。追加の依存は不要だが、外部の `eslint-plugin-*` を導入する場合は `requirement.md` 6章への追記と 9.4 の許可リストの更新が必要になる。ただし「WHERE 句の中身が正しいか」は静的解析では保証できず、最終防御線は統合テスト（`test.md`）である（`auth.md` 13章の留意と同じ）。
    ルールが実際に違反を検出することは、実装フェーズ最初のタスクで、違反コードを一時的に書いて確認する。
 
 ### 3.3 パスエイリアス
 
 - `@shared/*` → `src/shared/*` のみを定義する（tsconfig の `paths` と Vite の `resolve.alias`）。同一領域内（`api` 内、`client` 内）は相対 import とする。
-- **`src/api/db/schema.ts` から shared を参照するときは相対 import に限る。** drizzle-kit がスキーマを読み込む際にエイリアスを解決できるかは未検証のため、確認済みの相対 import（8章の実測）に揃える。
+- **`src/api/infrastructure/db/schema.ts`（旧 `src/api/db/schema.ts`。`backend.md` 2.3 でパスを確定）から shared を参照するときは相対 import に限る。** drizzle-kit がスキーマを読み込む際にエイリアスを解決できるかは未検証のため、確認済みの相対 import（8章の実測）に揃える。
 
 ## 4. スキーマ・型の正本（`src/shared`）
 
@@ -177,7 +177,7 @@ flowchart LR
 
 | 置かない | 理由 |
 |---|---|
-| Drizzle のテーブル定義 | DB の関心事。`src/api/db/schema.ts`（ただし制約値は shared から参照する） |
+| Drizzle のテーブル定義 | DB の関心事。`src/api/infrastructure/db/schema.ts`（ただし制約値は shared から参照する） |
 | Hono・React・DOM に依存するもの | 3.1 の依存ルール |
 
 ### 4.2 バリデーションは Zod に統一する（ADR-0008）
@@ -197,7 +197,7 @@ flowchart LR
 ```mermaid
 flowchart LR
     C["src/shared: 制約値の定数"] --> Z["Zod スキーマ（API・UI）"]
-    C --> D["Drizzle スキーマの CHECK（src/api/db/schema.ts）"]
+    C --> D["Drizzle スキーマの CHECK（src/api/infrastructure/db/schema.ts）"]
     C --> U["UI の入力制御・表示"]
 ```
 
@@ -208,7 +208,7 @@ flowchart LR
 
 - 実行時の正本は「shared の Zod スキーマ＋api のルート定義」とする。
 - `openapi.yaml` は**基本設計時点のスナップショットとして凍結**し、実装後は追従させない。冒頭に「基本設計時点の設計であり、実装と異なりうる」旨を注記する。手動での追従は二重管理のコストが大きく、正本はコード側にあるため。
-- 実装後の最新の API 仕様が必要な場合は、`@hono/zod-openapi` の生成機能（`getOpenAPI31Document` 等）でコードから生成する。生成の経路（npm script でファイルに出力するか、エンドポイントとして公開するか）と、公開する場合の認証の扱いは `backend.md` で確定する。
+- 実装後の最新の API 仕様が必要な場合は、`@hono/zod-openapi` の生成機能（`getOpenAPI31Document` 等）でコードから生成する。**生成経路は npm script でファイルに出力する方式に確定し、エンドポイントとしての公開は Phase 1 では行わない**（`backend.md` 11章）。
 - 凍結により、`openapi.yaml` と生成仕様の差分検知は行わない。
 
 ### 4.5 フロントへの型の渡し方
@@ -340,13 +340,13 @@ export default defineConfig({
 | `DB` | D1 バインディング | `.wrangler/state` 内のローカル D1 | Cloudflare D1 | 5.3 |
 | `GOOGLE_CLIENT_ID` | シークレット | `.dev.vars` | `wrangler secret put` | OAuth クライアント ID（`architecture.md` 8章の方針どおりシークレットとして管理） |
 | `GOOGLE_CLIENT_SECRET` | シークレット | `.dev.vars` | `wrangler secret put` | OAuth クライアントシークレット |
-| `LOG_LEVEL` | 変数（`vars`） | `.dev.vars`（`debug` 可） | `wrangler.jsonc` の `vars`（`info`） | `common-spec.md` 4章の「本番では debug を出力しない」の制御。名前・値の意味は `backend.md`（ロギング）で確定 |
+| `LOG_LEVEL` | 変数（`vars`） | `.dev.vars`（`debug` 可） | `wrangler.jsonc` の `vars`（`info`） | `common-spec.md` 4章の「本番では debug を出力しない」の制御。名前・値の意味は `backend.md` 10章で確定済み |
 
-- OAuth の redirect URI は完全一致が必要（`architecture.md` 5章）で、ローカル（Vite 開発サーバの origin）と本番（`*.workers.dev`）で異なる。ローカル用の redirect URI も Google Cloud Console に登録する必要がある。**redirect URI をリクエストの origin から導出するか、変数で持つかは `backend.md`（認証実装）で確定する**。登録手順は運用手順書のスコープ（`auth.md` 12章）。
+- OAuth の redirect URI は完全一致が必要（`architecture.md` 5章）で、ローカル（Vite 開発サーバの origin）と本番（`*.workers.dev`）で異なる。ローカル用の redirect URI も Google Cloud Console に登録する必要がある。**redirect URI はリクエストの origin から導出する方式に確定済み**（`backend.md` 5.3）。登録手順は運用手順書のスコープ（`auth.md` 12章）。
 - `.dev.vars.example` にキー名のみを列挙してコミットし、`.dev.vars` は Git 管理しない（2.2）。
 - **CI（GitHub Actions）**: Cloudflare API token を GitHub Secrets に置く（`architecture.md` 6・8章）。Wrangler が対象アカウントを特定するため、`CLOUDFLARE_ACCOUNT_ID` も必要になる見込みで、これは機密ではないため GitHub の Variables に置く（`architecture.md` 8章への追記事項。12章）。アプリのシークレットは CI に渡さない方針は変わらない。
 - **型**: `Env` の型は `wrangler types` で生成し（Git 管理しない）、`postinstall` と `typecheck` で再生成する。シークレット（`wrangler.jsonc` に現れない値）の型付け方法は実装時に確定する（未解決事項）。
-- ローカル開発で `__Host-` プレフィックスの Cookie（`Secure` 必須）が `http://localhost` で受理されるかはブラウザ依存の可能性があり、未確認である（未解決事項。`backend.md`（認証実装）・`CONTRIBUTING.md` で扱う）。
+- ローカル開発で `__Host-` プレフィックスの Cookie（`Secure` 必須）が `http://localhost` で受理されるかはブラウザ依存の可能性があり、未確認である（未解決事項。`CONTRIBUTING.md` で扱う。`backend.md` は Cookie 属性自体は 5章で定めるが、この挙動確認は対象としていない）。
 
 ## 8. マイグレーション・シード配置
 
@@ -354,7 +354,7 @@ export default defineConfig({
 
 | 項目 | 値 |
 |---|---|
-| スキーマ定義 | `src/api/db/schema.ts` |
+| スキーマ定義 | `src/api/infrastructure/db/schema.ts`（`backend.md` 2.3） |
 | drizzle-kit の生成先（`out`） | `./migrations` |
 | Wrangler の `migrations_dir` | `migrations` |
 | Wrangler の `migrations_pattern` | 既定（`migrations/*.sql`）。指定しない |
@@ -422,7 +422,7 @@ PRAGMA foreign_keys=ON;
 - 事前定義種目の `INSERT`（`owner_user_id` は NULL、UUID は SQL リテラルの固定値）を、`--custom` の migration として管理する。本番・ローカル・テストが同一経路で投入され、CI の既存工程（`migrations apply`）だけで本番に反映される。
 - 事前定義種目の名前重複は `db.md` 5.4 の `UNIQUE(owner_user_id, name)` では防げない（NULL 同士は区別されるため）。migration の内容で重複させないこと、および重複がないことをテストで確認する（`test.md`）。
 - 種目を追加する場合は新しい custom migration を追加する。変更・削除は、使用中の種目が `ON DELETE RESTRICT` で削除できない点に注意する。
-- 種目リストの内容（名称・カテゴリ・UUID）は `backend.md` 9章で確定する。
+- 種目リストの内容（名称・カテゴリ・UUID）は `backend.md` 12章で確定済み。
 - `architecture.md` 4章の `wrangler d1 execute --local --file=./seed.sql` は廃止する（12章）。
 - テストでは、migration の適用後に事前定義種目が入っている状態がベースになる（`test.md` に引き継ぐ）。
 
@@ -544,13 +544,13 @@ Git 純正の pre-commit の一部として、LLM を呼ばないルールベー
 2. **D1 上でのテーブル再作成の実挙動**（`PRAGMA foreign_keys=OFF` を含む migration が Wrangler の適用でどう扱われるか、親テーブル再作成時に子行が消えるか）。実 D1（ローカル）での実測が必要。実装フェーズ初期。
 3. **`.dev.vars` の Vite プラグインでの読み込み**と、シークレットの型付け方法（`wrangler types` の扱い）。実装フェーズ初期に確認する。
 4. **Storybook・Vitest から Cloudflare プラグインを除外する具体的な方法**（`frontend.md`・`test.md`）。
-5. **OAuth の redirect URI の導出方法**と、**`__Host-` Cookie の `http://localhost` での挙動**（`backend.md`・`CONTRIBUTING.md`）。
+5. **OAuth の redirect URI の導出方法（確定済み：リクエストの origin から導出。`backend.md` 5.3）**と、残る **`__Host-` Cookie の `http://localhost` での挙動**（`CONTRIBUTING.md`）。
 6. **Zod のバンドルサイズ**が FCP・Lighthouse の目標に与える影響（実装後に計測。必要なら `zod/mini` 等を検討）。
-7. **`compatibility_date`・`compatibility_flags`（`nodejs_compat`）**（`backend.md`）。
+7. **`compatibility_date`・`compatibility_flags`（`nodejs_compat`）**：`jose`・`crypto.subtle` は標準 Web API のみで完結する見込み（`backend.md` 13章）。実装フェーズ最初のタスクで確定する。
 8. **drizzle-kit 1.0 の GA 後の移行**（マイグレーションの配置形式が変わる。8.1）。
 9. **pre-push の LLM レビュー**のプロンプト・出力形式・所要時間とコストの実測（実装フェーズ）。
 10. **要件整合性チェックの許可リスト**の初期内容（6章の技術名とパッケージ名の対応表）。
 11. **shared の素の Zod スキーマを `@hono/zod-openapi` の `createRoute` に渡せるか**（4.2）。実装フェーズ最初のタスクで確認する。
-12. **Hono RPC の成立性**（4.5）：`OpenAPIHono` での chain の要否、型推論のコスト、`client` の型チェックでの Workers 型の解決。実装フェーズ最初のタスクで確認し、成立しない場合は「`shared` の型＋薄い fetch ラッパ」に戻す。
+12. **Hono RPC の成立性**（4.5）：`OpenAPIHono` での chain の要否は一次情報で確認し**必須と確定した**（`backend.md` 3.1）。残るのは型推論のコスト、`client` の型チェックでの Workers 型の解決。実装フェーズ最初のタスクで確認し、成立しない場合は「`shared` の型＋薄い fetch ラッパ」に戻す。
 13. **コンテナでのビルド成果物確認**（6.4）：`vite preview` が `.dev.vars` を読み込むか、rootless Podman の警告（`/` が shared mount でない）の影響、GitHub Actions のランナーでの Podman の利用可否。実装フェーズ最初のタスクで確認する。
-14. `backend.md`・`frontend.md`・`test.md` へ引き継ぐ事項：リポジトリ層の内部構成と `userId` の必須化（`backend.md`）、種目シードの内容（`backend.md`）、OpenAPI 仕様の生成経路（`backend.md`。4.4）、RPC クライアントのラッパと共通エラーの扱い（`frontend.md`。4.5）、統合テストの配置と CI での必須化・トリガー存在テスト・CHECK 制約の突合テスト・事前定義種目がある前提のテストデータ（`test.md`）。
+14. `backend.md`・`frontend.md`・`test.md` へ引き継ぐ事項：リポジトリ層の内部構成と `userId` の必須化・種目シードの内容・OpenAPI 仕様の生成経路は `backend.md` で確定済み。RPC クライアントのラッパと共通エラーの扱い（`frontend.md`。4.5）、統合テストの配置と CI での必須化・トリガー存在テスト・CHECK 制約の突合テスト・事前定義種目がある前提のテストデータ（`test.md`）は引き続き未確定。

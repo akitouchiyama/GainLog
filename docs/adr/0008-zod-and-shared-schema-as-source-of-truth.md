@@ -27,8 +27,8 @@
 
 - `src/shared` のスキーマ・型・制約値・メッセージ文言を、API・UI・Drizzle スキーマ（CHECK）の共通の出所（正本）とする。型は `z.infer` から得る。
 - shared のスキーマは素の `zod`（メタデータは Zod 4 の `.meta()`）で書き、`@hono/zod-openapi` を shared から import しない。`.openapi()` などの拡張は `src/api` 側でのみ適用する。
-- API の呼び出しは Hono RPC（`hc<AppType>`）で行い、`client` から `src/api/index.ts` の `AppType` を `import type` することだけを依存方向ルールの例外とする。RPC で得られるのは型のみのため、フォームの入力検証・エラー文言・制約値は引き続き shared を使う。成立性は実装フェーズ最初のタスクで確認し、成立しない場合は「shared の型 ＋ 薄い fetch ラッパ」に戻す。`openapi-typescript` は依存と生成手順が増え、shared と役割が重なるため採用しない。
-- `openapi.yaml` は基本設計時点のスナップショットとして凍結し、実装後は追従させない。最新の API 仕様が必要な場合は `@hono/zod-openapi` でコードから生成する（生成の経路は `backend.md`）。
+- API の呼び出しは Hono RPC（`hc<AppType>`）で行い、`client` から `src/api/index.ts` の `AppType` を `import type` することだけを依存方向ルールの例外とする。RPC で得られるのは型のみのため、フォームの入力検証・エラー文言・制約値は引き続き shared を使う。ルート定義・結合のメソッドチェーンが必須であることは一次情報で確認済み（`docs/Design/Detailed/backend.md` 3.1）。残る型推論コスト・Workers 型の解決は実装フェーズ最初のタスクで確認し、成立しない場合は「shared の型 ＋ 薄い fetch ラッパ」に戻す。`openapi-typescript` は依存と生成手順が増え、shared と役割が重なるため採用しない。
+- `openapi.yaml` は基本設計時点のスナップショットとして凍結し、実装後は追従させない。最新の API 仕様が必要な場合は `@hono/zod-openapi` でコードから生成する（生成経路は npm script でのファイル出力に確定済み。公開はしない。`docs/Design/Detailed/backend.md` 11章）。
 
 詳細は `docs/Design/Detailed/project-structure.md` 4章。
 
