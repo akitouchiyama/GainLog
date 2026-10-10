@@ -7,7 +7,7 @@
 - `screens.md` 4章・8章「クライアントサイドルーティングライブラリの具体的な選定」「コンポーネント設計・状態管理（React の実装詳細）」
 - `common-spec.md` 3章「UI側での即時バリデーションの実装詳細」・5章「ローディング・トーストの具体的なコンポーネント実装」
 - `auth.md` 2章・7章・10章・11章「フロントエンド実装スコープ」（XSS対策・ログアウト後のクリア・401のグローバル検知）
-- `project-structure.md` 1章（React Router・サーバー状態管理・Tailwind の版）・2.1（`src/client` 内部）・3.1/3.2（`client` 内部の依存方向）・4.5（RPC クライアントのラッパ・型のない共通エラーの扱い）・6.3（Storybook・Vitest から Cloudflare プラグインを除外する方法のうち Storybook 側）・10章（`storybook` scripts）・13章 未解決4・14
+- `project-structure.md` 1章（React Router・サーバー状態管理・Tailwind の版）・2.1（`src/client` 内部）・3.1/3.2（`client` 内部の依存方向）・4.5（RPC クライアントのラッパ・型のない共通エラーの扱い）・13章 未解決4・14
 - `backend.md` 4章（`GET /api/auth/me` の 401 化）・8.10（種目ブロック重複の 409）
 
 対象読者は開発者本人（実装者）である。粒度は「ディレクトリと責務・規約・主要フロー・選定理由」までとし、コンポーネントの中身・スタイルの微調整は実装（TDD）で詰める。対象は Phase 1 のみ。
@@ -33,10 +33,11 @@
 - UI 部品（ダイアログ・ドロワー・トースト）は外部ライブラリを使わず、ネイティブ `<dialog>` を用いて自前実装する（10章）。
 - フォームは `react-hook-form` 等を使わず自前実装とし、`shared` の Zod スキーマを直接使う（8章）。
 - Phase 1 で Content-Security-Policy を導入する（13章）。
+- UI コンポーネントカタログ（Storybook）は採用しない。E2E テストに **Playwright** を採用する（12章、ADR-0017）。
 
 ### 導入するライブラリ・版（要件定義書 6章への追記対象）
 
-`requirement.md` 6章に明記のないものは、本書の確定に合わせて 6章へ追記する（CLAUDE.md の合意ルール）。バージョンは 2026-09-27 時点の npm `latest` を一次情報（`npm view`）で確認したもので、実装時に再確認する。
+`requirement.md` 6章に明記のないものは、本書の確定に合わせて 6章へ追記する（CLAUDE.md の合意ルール）。バージョンは npm `latest` を一次情報（`npm view`）で確認したもので、実装時に再確認する（確認日は表に特記のない限り 2026-09-27。`@playwright/test` は 2026-10-10 に確認）。
 
 | 区分 | ライブラリ | 確認したバージョン | 備考 |
 |---|---|---|---|
@@ -45,10 +46,11 @@
 | Vite React 統合 | `@vitejs/plugin-react` | 6.1.1（peer: `vite ^8.0.0`） | `project-structure.md` の Vite 8.x と整合 |
 | サーバー状態管理 | `@tanstack/react-query` | 5.104.0 | `QueryCache`/`MutationCache` の `onError` フックを使う（5章） |
 | スタイリング | `tailwindcss` / `@tailwindcss/vite` | 4.3.3 / 4.3.3 | Vite プラグインとして導入（11章） |
-| UI コンポーネントカタログ | `storybook` / `@storybook/react-vite` | 10.6.0 / 10.6.0 | `.storybook/main.ts` の `viteFinal` で Cloudflare プラグインを除外する（12章） |
+| E2E テスト | `@playwright/test` | 1.64.0 | ADR-0017。CI での実行対象・タイミングは `test.md` で確定する（12章） |
 
 - ID トークン検証等バックエンド専用ライブラリは対象外（`backend.md` で確定済み）。
 - `react-hook-form`・Radix UI 等の UI/フォームライブラリは採用しない（10章・8章の判断）。
+- UI コンポーネントカタログ（Storybook）は採用しない。単独開発ではカタログ共有・デザインシステム化の価値を回収しにくく、コンテナ/表示部品分離（2.2章）によるコンポーネント確認は Vitest ＋ React Testing Library のレンダーテストに統合する（12章）。
 
 ## 2. アーキテクチャとディレクトリ構成
 
@@ -103,18 +105,18 @@ src/client/
 
 - `pages/*.tsx` は「どの `features` を使うか」の組み立てのみを行い、API 呼び出し・状態は持たない。
 - `AddExerciseDialog`（records）と `ExerciseFormDialog`（exercises）は同一の入力項目・制約を持つため、`ExerciseFormDialog` を `records` から import して使い回す（`screens.md` 5.5・5.6 の「UI コンポーネントを共用する想定」に対応）。
-- テストファイルは `project-structure.md` の暫定方針どおり対象の隣に `*.test.tsx` として置く（最終確定は `test.md`）。Storybook 用の `*.stories.tsx` も対象の隣に置く（12章）。
+- テストファイルは `project-structure.md` の暫定方針どおり対象の隣に `*.test.tsx` として置く（最終確定は `test.md`）。
 
 ### 2.2 コンテナ部品・表示部品の分離規約
 
-Storybook の対象をプレゼンテーション部品のみとする（12章）ため、次の規約を置く。
+コンポーネント単体のテスト容易性（props の差し替えだけで状態を再現できること）を高めるため、次の規約を置く。
 
-| 区分 | 責務 | 例 | Storybook |
-|---|---|---|---|
-| コンテナ（`features/*` の `use*.ts` フック・`pages/*`） | TanStack Query によるデータ取得・ミューテーション呼び出し | `useRecord`, `RecordPage` | 対象外 |
-| 表示部品（`features/*` の `.tsx`・`components/ui/*`） | props で受け取ったデータ・コールバックのみに依存し、API を直接呼ばない | `RecordEditor`（`record`・`onAddSet` 等を props で受ける）, `Dialog`, `Toast` | 対象 |
+| 区分 | 責務 | 例 |
+|---|---|---|
+| コンテナ（`features/*` の `use*.ts` フック・`pages/*`） | TanStack Query によるデータ取得・ミューテーション呼び出し | `useRecord`, `RecordPage` |
+| 表示部品（`features/*` の `.tsx`・`components/ui/*`） | props で受け取ったデータ・コールバックのみに依存し、API を直接呼ばない | `RecordEditor`（`record`・`onAddSet` 等を props で受ける）, `Dialog`, `Toast` |
 
-`RecordEditor` 等の画面本体コンポーネントは、対応する `pages/*.tsx` がフックの戻り値（データ・ローディング・ミューテーション関数）を props として渡す形にし、コンポーネント自身が `useQuery`/`useMutation` を呼ばない。これにより、ローディング・空・エラーの各状態を Storybook 上で props の差し替えだけで再現できる。
+`RecordEditor` 等の画面本体コンポーネントは、対応する `pages/*.tsx` がフックの戻り値（データ・ローディング・ミューテーション関数）を props として渡す形にし、コンポーネント自身が `useQuery`/`useMutation` を呼ばない。これにより、ローディング・空・エラーの各状態を Vitest ＋ React Testing Library 上で props の差し替えだけで再現できる（テストの粒度・ダブル方針は `test.md` で確定する）。
 
 ### 2.3 依存方向ルールの具体化
 
@@ -483,43 +485,23 @@ sequenceDiagram
 - レスポンシブはモバイルファーストで組み立てる（`requirement.md` 6章「スマートフォン・タブレット・PC」）。ドロワー方式のナビゲーションは画面幅で分岐させない（`screens.md` 3章の既定方針どおり）。
 - タップ領域は、モバイルでの誤操作を避けるため主要な操作ボタン（保存・削除・追加）を十分な大きさ（目安：一辺44px相当）で確保する方針とし、具体的なユーティリティクラスの割り当ては実装時に定める。
 
-## 12. Storybook 運用
+## 12. E2E テスト（Playwright）
 
-### 12.1 対象範囲
+### 12.1 方針
 
-2.2 のとおり、**プレゼンテーション部品のみ**を Storybook の対象とする。API モック（MSW 等）は導入しない。データ取得を行うコンテナ部品（`pages/*`、`use*.ts`）は対象外。
+E2E テストに Playwright（`@playwright/test`）を採用する（ADR-0017）。学習目的を優先した採用であり、Phase 1 の品質保証として必須という位置づけではない。CI に組み込み、本リポジトリが Public であり GitHub Actions の標準ランナーが無料で使えることを前提とする。対象シナリオ・実行タイミング・テストダブルの方針は `test.md` で確定する。
 
-### 12.2 Cloudflare プラグインの除外
+### 12.2 Cloudflare プラグインとの関係
 
-`@storybook/react-vite` はプロジェクト直下の `vite.config.ts` をマージして利用するため、`@cloudflare/vite-plugin`（`vite.config.ts` に含まれる。`project-structure.md` 6.1）が Storybook のビルドにも読み込まれてしまう。これを避けるため、`.storybook/main.ts` の `viteFinal` フックでこのプラグインだけを除外する。
-
-```ts
-// .storybook/main.ts（方針）
-const config: StorybookConfig = {
-  framework: '@storybook/react-vite',
-  stories: ['../src/client/**/*.stories.@(ts|tsx)'],
-  async viteFinal(config) {
-    return {
-      ...config,
-      plugins: config.plugins
-        ?.flat()
-        .filter((p) => !p || p.name !== 'vite-plugin-cloudflare'),
-    }
-  },
-}
-```
-
-- 一次情報で確認：`@storybook/react-vite` は `viteFinal`（`StorybookConfig['viteFinal']`）フックを提供し、Storybook が使う Vite 設定を上書き・加工できる（型定義で確認）。`@cloudflare/vite-plugin` の Vite プラグインとしての内部 `name` は `"vite-plugin-cloudflare"` であることを、パッケージの配布物から直接確認した。Vite のプラグイン配列はプラグインオブジェクトの配列を要素に持てる（ネストしうる）ため `.flat()` してから `filter` する。
-- Vitest（`client`・`shared` プロジェクト）から同プラグインを除外する具体的な方法は `test.md` で確定する（`project-structure.md` 未解決4 の残り）。
+Playwright はビルド済みの SPA（`vite build` の出力、または `vite dev` のサーバ）に対してブラウザ経由でアクセスするため、Storybook が必要としていたような `@cloudflare/vite-plugin` の個別除外は不要である。Vitest（`client`・`shared` プロジェクト）から同プラグインを除外する具体的な方法は `test.md` で確定する（`project-structure.md` 未解決4）。
 
 ### 12.3 scripts
 
 | script | 内容 |
 |---|---|
-| `storybook` | `storybook dev`（ポートは実装時に決定） |
-| `storybook:build` | `storybook build` |
+| `e2e` | `playwright test`（実行対象・設定は `test.md` で確定） |
 
-`project-structure.md` 10章の該当行（「`frontend.md` で確定」）はこの節への参照に更新する（16章）。CI での `storybook:build` の実行要否は `test.md`（CI でのテスト範囲）に委ねる。
+`project-structure.md` 10章の該当行は、この節への参照に更新する（16章）。
 
 ## 13. セキュリティ
 
@@ -565,7 +547,7 @@ const config: StorybookConfig = {
 
 - Phase 2 の画面・機能（成長グラフ、目標設定、メニュー、allowlist 管理画面）
 - ドロワー・トースト・モーダルの具体的な幅・アニメーション・表示時間（`screens.md` 8章・`common-spec.md` 8章のとおり実装時に定める）
-- テストの配置・ダブル方針・コンポーネントテストの粒度・Storybook と Vitest の関係（`test.md`）
+- テストの配置・ダブル方針・コンポーネントテストの粒度・E2E（Playwright）の対象シナリオ・実行タイミング（`test.md`）
 - Google Cloud Console 側の設定（`auth.md` 12章のスコープ）
 - CSP の実機での最終確定（13.2 の未確認事項。実装フェーズ最初のタスク）
 
@@ -585,8 +567,8 @@ const config: StorybookConfig = {
 | `src/client` 内部構成 | `project-structure.md` 2.1・3.1（`frontend.md` で確定） | 2章で確定 | **追従修正が必要**：参照を本書へ更新 |
 | client 内部の依存方向・lint | `project-structure.md` 3.2（`frontend.md` で確定と明記） | 2.3 で具体化 | **追従修正が必要**：`project-structure.md` 3.2 の client 行に参照を追加 |
 | RPC ラッパ・型のない共通エラーの扱い | `project-structure.md` 4.5（`frontend.md` で確定） | 4章で確定 | **追従修正が必要**：参照を本書へ更新 |
-| Storybook から Cloudflare プラグインを除外する方法 | `project-structure.md` 6.3・未解決4、ADR-0009（`frontend.md`・`test.md` で確定） | Storybook 側は 12.2 で確定（Vitest 側は `test.md`） | **追従修正が必要**：`project-structure.md` 6.3・13章 未解決4、ADR-0009 の参照を更新 |
-| `storybook` scripts | `project-structure.md` 10章（`frontend.md` で確定） | 12.3 で確定 | **追従修正が必要**：参照を本書へ更新 |
+| UI コンポーネントカタログ（Storybook）の採否 | `project-structure.md` 1章・6.3・10章・13章 未解決4、ADR-0009（`frontend.md` で確定） | 採用しない（1章、12章）。`project-structure.md`・ADR-0009 の Storybook 関連記述は撤回する | **追従修正が必要**：`project-structure.md` の `.storybook/` ディレクトリ・6.3章・10章 scripts・13章 未解決4、ADR-0009 Consequences の Storybook 言及を削除 |
+| E2E テストの要否・ライブラリ選定 | `backend.md`・`project-structure.md`（本書では扱っていない） | Playwright を採用（1章、12章、ADR-0017）。CI 組み込みの詳細は `test.md` で確定 | **追従修正が必要**：`requirement.md` 6章へ Playwright を追記、ADR-0017 を新規追加 |
 | `/auth/me` の401化を前提にした認証ガード | `backend.md` 4章 | 3.2 で確定 | 整合。追加のADRは不要 |
 | 種目ブロック重複（409）への対応 | `backend.md` 8.10（本書で確定なし。UI 側は本書の対象） | 7.4 で「選択肢から除外」に確定（D14） | **追従修正が必要**：`screens.md` 5.5 に一言追記 |
 
@@ -595,8 +577,8 @@ const config: StorybookConfig = {
 1. **`hc` の型推論の利用方法**：各フックで成功時の型を `hc` の `InferResponseType` から取るか `shared` の型を明示するか（4.2）。実装フェーズ最初のタスクで決める。
 2. **`_headers` が SPA フォールバック応答（`not_found_handling: single-page-application`）にも適用されるか**（13.2）。実装フェーズ最初のタスクで実機確認する。
 3. **Tailwind v4 の生成物がインライン style を要するか**（13.2）。実装時に確認し、CSP の `style-src` を必要なら見直す。
-4. **Storybook・Vitest（client・shared）から Cloudflare プラグインを除外する方法のうち、Vitest 側**（`test.md` で確定。Storybook 側は 12.2 で確定済み）。
+4. **Vitest（client・shared）から Cloudflare プラグインを除外する具体的な方法**（`test.md` で確定。`project-structure.md` 未解決4）。
 5. **コード分割の要否**（14章）：実装後の Lighthouse 計測で判断する。
 6. **`ConfirmDialog`・`Drawer` の `<dialog>` の閉じ方の実装詳細**（`close` イベント判定か明示的な `close()` 呼び出しか。10.2）。
-7. **`test.md` へ引き継ぐ事項**：コンポーネントテストの方針（表示部品のみを対象にするか）、`lib/date.ts` の固定時刻への差し替え方法、Storybook と Vitest の関係、E2E テストの要否（本書では扱っていない）。
+7. **`test.md` へ引き継ぐ事項**：コンポーネントテストの方針（表示部品のみを対象にするか）、`lib/date.ts` の固定時刻への差し替え方法、E2E（Playwright）の対象シナリオ・実行タイミング・CI への組み込み方。
 8. **Hono RPC の型推論コスト**（`project-structure.md` 未解決12 の残り。`backend.md` からの引き継ぎ）：ルート数が確定した段階で `client` 側の型チェック時間を計測する。
