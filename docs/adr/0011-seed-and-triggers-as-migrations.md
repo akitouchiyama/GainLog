@@ -32,7 +32,7 @@
 ## Consequences
 
 - 事前定義種目が、本番・ローカル・テストで同一経路により投入される。`architecture.md` 4章の `seed.sql` 記述は更新が必要になる。
-- テストは「migration 適用後に事前定義種目が入っている」状態を前提とする（`test.md` に引き継ぐ）。
+- テストは「migration 適用後に事前定義種目が入っている」状態を前提とする（`docs/Design/Detailed/test.md` 4.2・5.3 で確定済み）。
 - `db.md` 5.4 の `UNIQUE(owner_user_id, name)` は NULL 同士の重複を防げないため、migration の内容とテストで事前定義種目の名前重複がないことを担保する。
 - Drizzle の `text('category', { enum })` は DB の `CHECK` を生成しない（実測）。`db.md` の `CHECK` は `check()` で明示的に定義し、生成 SQL との突合テストを用意する。
 - ADR-0004 の「後方互換な変更に限定する」方針を、上記の規約で具体化する。drizzle-kit 1.0 系（現在 rc）はマイグレーションの配置形式が変わるため、GA 後の移行時に本 ADR と `project-structure.md` 8.1 を更新する。

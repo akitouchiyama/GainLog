@@ -49,3 +49,5 @@ GainLog における設計上の重要な判断を、背景・決定・結果と
 | [0015](0015-react-router-and-tanstack-query.md) | SPA のルーティングとサーバー状態管理に React Router と TanStack Query を採用する | Accepted |
 | [0016](0016-record-editor-immediate-save.md) | 記録画面は操作ごとの即時保存とする | Accepted |
 | [0017](0017-playwright-for-e2e.md) | E2E テストに Playwright を採用する | Accepted |
+| [0018](0018-test-runtime-and-tools.md) | テスト実行基盤に `@cloudflare/vitest-plugin`・jsdom／RTL・MSW を採用する | Accepted |
+| [0019](0019-e2e-auth-by-direct-session-injection.md) | E2E の認証はセッションの直接投入で用意する | Accepted |
