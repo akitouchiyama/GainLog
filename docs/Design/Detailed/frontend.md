@@ -46,7 +46,7 @@
 | Vite React 統合 | `@vitejs/plugin-react` | 6.1.1（peer: `vite ^8.0.0`） | `project-structure.md` の Vite 8.x と整合 |
 | サーバー状態管理 | `@tanstack/react-query` | 5.104.0 | `QueryCache`/`MutationCache` の `onError` フックを使う（5章） |
 | スタイリング | `tailwindcss` / `@tailwindcss/vite` | 4.3.3 / 4.3.3 | Vite プラグインとして導入（11章） |
-| E2E テスト | `@playwright/test` | 1.64.0 | ADR-0017。CI での実行対象・タイミングは `test.md` で確定する（12章） |
+| E2E テスト | `@playwright/test` | 1.64.0 | ADR-0017。実行対象・タイミングは `test.md` 7章・10章で確定済み（12章） |
 
 - ID トークン検証等バックエンド専用ライブラリは対象外（`backend.md` で確定済み）。
 - `react-hook-form`・Radix UI 等の UI/フォームライブラリは採用しない（10章・8章の判断）。
@@ -105,7 +105,7 @@ src/client/
 
 - `pages/*.tsx` は「どの `features` を使うか」の組み立てのみを行い、API 呼び出し・状態は持たない。
 - `AddExerciseDialog`（records）と `ExerciseFormDialog`（exercises）は同一の入力項目・制約を持つため、`ExerciseFormDialog` を `records` から import して使い回す（`screens.md` 5.5・5.6 の「UI コンポーネントを共用する想定」に対応）。
-- テストファイルは `project-structure.md` の暫定方針どおり対象の隣に `*.test.tsx` として置く（最終確定は `test.md`）。
+- テストファイルは `project-structure.md` の暫定方針どおり対象の隣に `*.test.tsx` として置く（`test.md` 9.1 で確定。テスト支援コードは `src/client/testing/`）。
 
 ### 2.2 コンテナ部品・表示部品の分離規約
 
@@ -116,7 +116,7 @@ src/client/
 | コンテナ（`features/*` の `use*.ts` フック・`pages/*`） | TanStack Query によるデータ取得・ミューテーション呼び出し | `useRecord`, `RecordPage` |
 | 表示部品（`features/*` の `.tsx`・`components/ui/*`） | props で受け取ったデータ・コールバックのみに依存し、API を直接呼ばない | `RecordEditor`（`record`・`onAddSet` 等を props で受ける）, `Dialog`, `Toast` |
 
-`RecordEditor` 等の画面本体コンポーネントは、対応する `pages/*.tsx` がフックの戻り値（データ・ローディング・ミューテーション関数）を props として渡す形にし、コンポーネント自身が `useQuery`/`useMutation` を呼ばない。これにより、ローディング・空・エラーの各状態を Vitest ＋ React Testing Library 上で props の差し替えだけで再現できる（テストの粒度・ダブル方針は `test.md` で確定する）。
+`RecordEditor` 等の画面本体コンポーネントは、対応する `pages/*.tsx` がフックの戻り値（データ・ローディング・ミューテーション関数）を props として渡す形にし、コンポーネント自身が `useQuery`/`useMutation` を呼ばない。これにより、ローディング・空・エラーの各状態を Vitest ＋ React Testing Library 上で props の差し替えだけで再現できる（テストの粒度・ダブル方針は `test.md` 6・8章で確定済み）。
 
 ### 2.3 依存方向ルールの具体化
 
@@ -446,7 +446,7 @@ sequenceDiagram
 
 - `src/shared` の JST 日付ユーティリティ（`project-structure.md` 4.1）は「現在時刻を引数で受け取る純関数」である。`lib/date.ts` がこれらを呼び出す側として、`new Date()`（実行時の現在時刻）を渡す一点に集約する。
 - 月送り（カレンダー）・直近7日間（週間一覧）の範囲計算は、`lib/date.ts` の関数（`shared` の純関数をラップしたもの）として実装し、コンポーネントからは「今月」「今週」を直接計算させない。
-- テスト時は `lib/date.ts` のこの一点だけを固定時刻に差し替えれば足りる（`test.md` へ引き継ぐ）。
+- テスト時は `lib/date.ts` のこの一点だけを固定時刻に差し替えれば足りる（`test.md` 6.4 で確定済み：`vi.mock` で固定値に差し替える）。
 - 日付の表示形式は `YYYY-MM-DD`（`requirement.md` 非機能要件）を基本とし、カレンダーの月表示等の人が読みやすい形式は表示専用の整形関数で変換する（DB・API とのやり取りには使わない）。
 
 ## 10. 共通 UI コンポーネント
@@ -489,17 +489,17 @@ sequenceDiagram
 
 ### 12.1 方針
 
-E2E テストに Playwright（`@playwright/test`）を採用する（ADR-0017）。学習目的を優先した採用であり、Phase 1 の品質保証として必須という位置づけではない。CI に組み込み、本リポジトリが Public であり GitHub Actions の標準ランナーが無料で使えることを前提とする。対象シナリオ・実行タイミング・テストダブルの方針は `test.md` で確定する。
+E2E テストに Playwright（`@playwright/test`）を採用する（ADR-0017）。学習目的を優先した採用であり、Phase 1 の品質保証として必須という位置づけではない。CI に組み込み、本リポジトリが Public であり GitHub Actions の標準ランナーが無料で使えることを前提とする。対象シナリオ・実行タイミング・テストダブルの方針は `test.md` 7・8・10章で確定済み。
 
 ### 12.2 Cloudflare プラグインとの関係
 
-Playwright はビルド済みの SPA（`vite build` の出力、または `vite dev` のサーバ）に対してブラウザ経由でアクセスするため、Storybook が必要としていたような `@cloudflare/vite-plugin` の個別除外は不要である。Vitest（`client`・`shared` プロジェクト）から同プラグインを除外する具体的な方法は `test.md` で確定する（`project-structure.md` 未解決4）。
+Playwright はビルド済みの SPA（`vite build` の出力、または `vite dev` のサーバ）に対してブラウザ経由でアクセスするため、Storybook が必要としていたような `@cloudflare/vite-plugin` の個別除外は不要である。Vitest（`client`・`shared` プロジェクト）から同プラグインを除外する具体的な方法は `test.md` 4.1 で確定済み（`project-structure.md` 未解決4）。
 
 ### 12.3 scripts
 
 | script | 内容 |
 |---|---|
-| `e2e` | `playwright test`（実行対象・設定は `test.md` で確定） |
+| `e2e` | `playwright test`（実行対象・設定は `test.md` 7章） |
 
 `project-structure.md` 10章の該当行は、この節への参照に更新する（16章）。
 
@@ -577,8 +577,8 @@ Playwright はビルド済みの SPA（`vite build` の出力、または `vite 
 1. **`hc` の型推論の利用方法**：各フックで成功時の型を `hc` の `InferResponseType` から取るか `shared` の型を明示するか（4.2）。実装フェーズ最初のタスクで決める。
 2. **`_headers` が SPA フォールバック応答（`not_found_handling: single-page-application`）にも適用されるか**（13.2）。実装フェーズ最初のタスクで実機確認する。
 3. **Tailwind v4 の生成物がインライン style を要するか**（13.2）。実装時に確認し、CSP の `style-src` を必要なら見直す。
-4. **Vitest（client・shared）から Cloudflare プラグインを除外する具体的な方法**（`test.md` で確定。`project-structure.md` 未解決4）。
+4. **Vitest（client・shared）から Cloudflare プラグインを除外する具体的な方法**（`test.md` 4.1 で確定済み。`project-structure.md` 未解決4）。
 5. **コード分割の要否**（14章）：実装後の Lighthouse 計測で判断する。
 6. **`ConfirmDialog`・`Drawer` の `<dialog>` の閉じ方の実装詳細**（`close` イベント判定か明示的な `close()` 呼び出しか。10.2）。
-7. **`test.md` へ引き継ぐ事項**：コンポーネントテストの方針（表示部品のみを対象にするか）、`lib/date.ts` の固定時刻への差し替え方法、E2E（Playwright）の対象シナリオ・実行タイミング・CI への組み込み方。
+7. **`test.md` で確定済み（6・7・10章）**：コンポーネントテストの方針（表示部品のみを対象にするか）、`lib/date.ts` の固定時刻への差し替え方法、E2E（Playwright）の対象シナリオ・実行タイミング・CI への組み込み方。
 8. **Hono RPC の型推論コスト**（`project-structure.md` 未解決12 の残り。`backend.md` からの引き継ぎ）：ルート数が確定した段階で `client` 側の型チェック時間を計測する。

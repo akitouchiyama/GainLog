@@ -271,4 +271,4 @@ D1（SQLiteベース）にはPostgreSQLのようなDBエンジン側のRow Level
 - [x] ハンドラから直接Drizzleクエリを呼び出すことを禁止するLintルールの要否・具体的な実装方法（ESLint の `no-restricted-imports` を層ごとに設定。`infrastructure/**` 以外での `drizzle-orm*` 禁止。`docs/Design/Detailed/backend.md` 2.4）
 - [x] 所有者チェック対象リソース一覧（`docs/Design/Detailed/backend.md` 6.2 で網羅）
 - [x] 事前定義データ（`owner_user_id`がnull、8章の例外ケース）に対する分岐処理（404/403の使い分け。`docs/Design/Detailed/backend.md` 6.3）
-- [ ] 統合テストの配置・命名規約、およびCIでの実行必須化の要否（`test.md` で確定する）
+- [x] 統合テストの配置・命名規約、およびCIでの実行必須化の要否（`docs/Design/Detailed/test.md` 5.5・5.6・9.1・10.1 で確定。routes の隣に配置し、Vitest の全 projects は PR・main とも必須）

@@ -44,7 +44,7 @@
 | パッケージマネージャ | pnpm | – | |
 | コンテナ | Podman ＋ podman-compose（Containerfile / Compose Spec） | 開発機で Podman 4.9.3・podman-compose を確認 | npm 依存ではない。ビルド成果物の確認用（6.4） |
 
-ID token 検証ライブラリは `backend.md` 5.1 章で `jose` に確定済み（ADR-0014）。React Router・サーバー状態管理（TanStack Query）・Tailwind の版は `frontend.md` 1章で確定済み（ADR-0015）。テスト用ライブラリは `test.md` で選定し、その PR で 6章へ追記する。
+ID token 検証ライブラリは `backend.md` 5.1 章で `jose` に確定済み（ADR-0014）。React Router・サーバー状態管理（TanStack Query）・Tailwind の版は `frontend.md` 1章で確定済み（ADR-0015）。テスト用ライブラリは `test.md` 1章で選定済み（`requirement.md` 6章へ追記済み。ADR-0018）。バージョンは 2026-10-10 時点で wrangler 4.149.0・`@cloudflare/vite-plugin` 1.63.1 に更新されており、`@cloudflare/vitest-plugin` が wrangler 4.149.0 に依存するため、実装時に上の表の版を再確認して揃える。
 
 ## 2. ディレクトリ構成と責務
 
@@ -70,7 +70,9 @@ GainLog/
 ├── index.html                # Vite のクライアントエントリ（リポジトリ直下）
 ├── wrangler.jsonc            # Worker・Static Assets・D1 の設定（5章）
 ├── vite.config.ts            # Vite ＋ Cloudflare プラグイン（6章）
-├── vitest.config.ts          # Vitest の projects 定義（6章。詳細は test.md）
+├── vitest.config.ts          # Vitest の projects 定義（6章。`test.md` 4.1。vite.config.ts を継承しない）
+├── playwright.config.ts      # E2E の設定（`test.md` 7章）
+├── e2e/                      # Playwright の E2E テストと補助（`test.md` 7章）
 ├── drizzle.config.ts         # drizzle-kit の設定（8章）
 ├── eslint.config.js          # ESLint flat config（3章）
 ├── tsconfig.json             # references のみ（3章）
@@ -88,7 +90,7 @@ GainLog/
   - `src/api/index.ts`（Worker エントリ）
   - `src/api/infrastructure/db/schema.ts`（Drizzle スキーマ。`drizzle.config.ts` が参照する。パスは `backend.md` 2.3 で確定）
   - `src/shared/`（4章）
-- テストファイルは対象の隣に `*.test.ts(x)` として置く方針を暫定とし、`test.md` で確定する。
+- テストファイルは対象の隣に `*.test.ts(x)` として置く（`test.md` 9.1 で確定）。テスト支援コード（ビルダー・fake・MSW ハンドラ）は各領域の `testing/` に置く（同 9.2）。E2E はリポジトリ直下の `e2e/`。
 - `index.html` をリポジトリ直下に置くのは、`@cloudflare/vite-plugin` が「プロジェクト直下の `index.html`」をクライアント環境のビルド対象とみなすためである（公式ドキュメント）。
 
 ### 2.2 Git 管理しないもの
@@ -156,7 +158,7 @@ flowchart LR
    | `src/client/**` の内部ディレクトリごとの追加ルール | `frontend.md` 2.3（`components/ui`・`lib` から `features`/`pages` を禁止、`features` 間は `exercises → records` の一方向のみ許可 等） |
 
    client の例外（3.1）は、`@typescript-eslint/no-restricted-imports` の `allowTypeImports` を `src/api/index.ts` のパスに限って有効にして実現する。値としての import（`import { app }` 等）は引き続き禁止される。
-   表の最後の行が `auth.md` 13章の「ハンドラから直接 Drizzle を呼ぶことを禁止する Lint」に相当する（`backend.md` 2.4 で「`infrastructure/**` 以外での `drizzle-orm*` 禁止」として具体化）。**現時点では専用のカスタム ESLint ルールは作らず、`no-restricted-imports` で足りる**という方針とする。実装中に静的に検出したい規約が出てきた場合は、flat config にローカルルール（リポジトリ内のプラグイン）として追加してよい。追加の依存は不要だが、外部の `eslint-plugin-*` を導入する場合は `requirement.md` 6章への追記と 9.4 の許可リストの更新が必要になる。ただし「WHERE 句の中身が正しいか」は静的解析では保証できず、最終防御線は統合テスト（`test.md`）である（`auth.md` 13章の留意と同じ）。
+   表の最後の行が `auth.md` 13章の「ハンドラから直接 Drizzle を呼ぶことを禁止する Lint」に相当する（`backend.md` 2.4 で「`infrastructure/**` 以外での `drizzle-orm*` 禁止」として具体化）。**現時点では専用のカスタム ESLint ルールは作らず、`no-restricted-imports` で足りる**という方針とする。実装中に静的に検出したい規約が出てきた場合は、flat config にローカルルール（リポジトリ内のプラグイン）として追加してよい。追加の依存は不要だが、外部の `eslint-plugin-*` を導入する場合は `requirement.md` 6章への追記と 9.4 の許可リストの更新が必要になる。ただし「WHERE 句の中身が正しいか」は静的解析では保証できず、最終防御線は統合テスト（`test.md` 5.5・5.6）である（`auth.md` 13章の留意と同じ）。なお、テストコード（`*.test.ts(x)`・`testing/**`）には api 内部の層ルールのみ緩和を適用し、`api ⇄ client` の禁止と `shared` の純粋性は維持する。本番コードから `**/testing/**` の import は禁止する（`test.md` 9.2）。
    ルールが実際に違反を検出することは、実装フェーズ最初のタスクで、違反コードを一時的に書いて確認する。
 
 ### 3.3 パスエイリアス
@@ -203,7 +205,7 @@ flowchart LR
     C --> U["UI の入力制御・表示"]
 ```
 
-- **実測で判明した注意（drizzle-kit 0.31.10）**: Drizzle の `text('category', { enum: [...] })` は TypeScript の型を絞るだけで、**DB の `CHECK` 制約を生成しない**。`db.md` 5.4 が求める `category` の `CHECK` は、`check()` で明示的に定義する。同様に、`db.md` 6章の制約一覧（CHECK・UNIQUE）は、スキーマ定義から生成された SQL に含まれていることをテストで突合する（`test.md`）。
+- **実測で判明した注意（drizzle-kit 0.31.10）**: Drizzle の `text('category', { enum: [...] })` は TypeScript の型を絞るだけで、**DB の `CHECK` 制約を生成しない**。`db.md` 5.4 が求める `category` の `CHECK` は、`check()` で明示的に定義する。同様に、`db.md` 6章の制約一覧（CHECK・UNIQUE）は、スキーマ定義から生成された SQL に含まれていることをテストで突合する（`test.md` 5.3）。
 - 同じく実測で、shared の定数を `check()` の中で参照しても、生成 SQL には値が展開されて出力されることを確認した（`BETWEEN 0 AND 9999` の形）。
 
 ### 4.4 OpenAPI（`openapi.yaml`）の扱い
@@ -302,8 +304,8 @@ export default defineConfig({
 ### 6.3 型チェック・Vitest
 
 - 型チェックは `tsc -b`（3.2 の tsconfig 分割）。`wrangler types` の生成物を含む。
-- Vitest はルートの `vitest.config.ts` で **api／client／shared の 3 プロジェクトに分ける**（Workers 環境・DOM 環境・Node 環境）。使用するプールやライブラリは `test.md` で確定する。
-- **規約**: `@cloudflare/vite-plugin` は `vite.config.ts` にのみ含め、Vitest（client・shared）が Worker 用プラグインを読み込まない設定にする。具体的な分離方法は `test.md` で確定する。
+- Vitest はルートの `vitest.config.ts` で **api／client／shared の 3 プロジェクトに分ける**（Workers 環境・DOM 環境・Node 環境）。実行基盤は `@cloudflare/vitest-plugin`（api）・jsdom（client）・Node（shared）とする（`test.md` 4章、ADR-0018）。
+- **規約**: `@cloudflare/vite-plugin` は `vite.config.ts` にのみ含め、Vitest（client・shared）が Worker 用プラグインを読み込まない設定にする。`vitest.config.ts` を `vite.config.ts` から独立して定義する（`test.md` 4.1）。
 
 ### 6.4 開発環境とコンテナでのビルド成果物確認（ADR-0012）
 
@@ -413,7 +415,7 @@ PRAGMA foreign_keys=ON;
 
 | リスク | 内容 | 規約 |
 |---|---|---|
-| トリガーの消失 | `DROP TABLE` でそのテーブルのトリガーが削除される | 再作成を含む migration では、同じ migration の末尾でトリガー DDL を再作成する。マイグレーション適用後にトリガーが存在することを、テストで確認する（`test.md`） |
+| トリガーの消失 | `DROP TABLE` でそのテーブルのトリガーが削除される | 再作成を含む migration では、同じ migration の末尾でトリガー DDL を再作成する。マイグレーション適用後にトリガーが存在することを、テストで確認する（`test.md` 5.3） |
 | FK の CASCADE | D1 では `PRAGMA foreign_keys` で FK を無効化できない（`db.md` 1章）。子から参照される親テーブル（`users` / `exercises` / `workout_records`）の再作成は、`DROP TABLE` 時の暗黙の削除により `ON DELETE CASCADE` の子行（記録・セット）を消す可能性がある（D1 での実挙動は未検証） | 親テーブルの再作成を伴う migration は原則行わない。必要な場合は、データ退避を含む手順を別途設計し、ローカルの実 D1 で回帰テストしてから適用する |
 | 生成 SQL の見落とし | 意図せず再作成が生成されても気付きにくい | 9章の pre-commit で `migrations/*.sql` に再作成（`__new_` / `DROP TABLE`）を検出し、レビュー済みの印がなければコミットを止める |
 
@@ -422,11 +424,11 @@ PRAGMA foreign_keys=ON;
 **基本設計の穴の解消:** `architecture.md` 4章のシード手順はローカル用のみで、6章の CI にシード工程がなく、本番へ事前定義種目を入れる経路が定義されていなかった。次のとおり確定する。
 
 - 事前定義種目の `INSERT`（`owner_user_id` は NULL、UUID は SQL リテラルの固定値）を、`--custom` の migration として管理する。本番・ローカル・テストが同一経路で投入され、CI の既存工程（`migrations apply`）だけで本番に反映される。
-- 事前定義種目の名前重複は `db.md` 5.4 の `UNIQUE(owner_user_id, name)` では防げない（NULL 同士は区別されるため）。migration の内容で重複させないこと、および重複がないことをテストで確認する（`test.md`）。
+- 事前定義種目の名前重複は `db.md` 5.4 の `UNIQUE(owner_user_id, name)` では防げない（NULL 同士は区別されるため）。migration の内容で重複させないこと、および重複がないことをテストで確認する（`test.md` 5.3）。
 - 種目を追加する場合は新しい custom migration を追加する。変更・削除は、使用中の種目が `ON DELETE RESTRICT` で削除できない点に注意する。
 - 種目リストの内容（名称・カテゴリ・UUID）は `backend.md` 12章で確定済み。
 - `architecture.md` 4章の `wrangler d1 execute --local --file=./seed.sql` は廃止する（12章）。
-- テストでは、migration の適用後に事前定義種目が入っている状態がベースになる（`test.md` に引き継ぐ）。
+- テストでは、migration の適用後に事前定義種目が入っている状態がベースになる（`test.md` 4.2 で確定済み）。
 
 ## 9. 品質ゲート・ツールチェーン方針（ADR-0010）
 
@@ -486,6 +488,7 @@ Git 純正の pre-commit の一部として、LLM を呼ばないルールベー
   1. **gitleaks ジョブ**（先頭・独立）: 依存のインストールもビルドも不要なため最初に実行する。PR のコミット範囲を検査するため checkout は `fetch-depth: 0` とする。gitleaks はバイナリを直接実行する（`gitleaks-action` v2 は Organization のリポジトリでライセンスキーを要するため、将来の移管に備えて依存しない）。
   2. **検査ジョブ**（`needs: gitleaks`）: 依存インストール（`pnpm install --frozen-lockfile`）→ lint → 型チェック → テスト（Vitest）→ ビルド。gitleaks が検知した場合は実行されない。
   3. **コンテナビルドジョブ**（`needs: gitleaks`。検査ジョブと並列）: `Containerfile` からイメージをビルドし、定義が壊れていないことを確認する（6.4）。起動・動作確認までは行わない。ランナーの Podman を使う想定で、使えない場合は `docker build` で代替する（Containerfile は OCI 準拠のためどちらでもビルドできる）。
+  4. **E2E ジョブ**（`needs: gitleaks`。検査ジョブ・コンテナビルドジョブと並列）: Playwright で主要シナリオを実行する（`test.md` 7・10.1章）。デプロイのブロック要件にはしない。
 - **main**: テスト → ビルド → マイグレーション適用 → `wrangler deploy`（6.2）。テストが失敗した場合はデプロイを中断する。`wrangler deploy` が失敗した場合は、マイグレーションを再適用せずデプロイのみを再試行する（ADR-0004）。
 - PR の必須チェック化（Branch protection）は GitHub の設定であり、`CONTRIBUTING.md`（実装着手直前）で手順化する。
 
@@ -505,7 +508,8 @@ Git 純正の pre-commit の一部として、LLM を呼ばないルールベー
 | `preview` | `vite preview`（ビルド成果物を workerd で確認） |
 | `typecheck` | `wrangler types` → `tsc -b` |
 | `lint` / `format` / `format:check` | ESLint / Prettier |
-| `test` | `vitest run`（詳細は `test.md`） |
+| `test` | `vitest run`（全 projects。`test.md` 4.4） |
+| `test:watch` / `test:coverage` | `vitest` / `vitest run --coverage`（`test.md` 4.4・10.3） |
 | `db:generate` / `db:migrate:local` / `db:reset:local` | 8.2 |
 | `e2e` | `frontend.md` 12.3 章で確定（Playwright、ADR-0017） |
 | `container:up` / `container:down` | `podman-compose up --build` / `podman-compose down`（6.4） |
@@ -545,7 +549,7 @@ Git 純正の pre-commit の一部として、LLM を呼ばないルールベー
 1. **`@cloudflare/vite-plugin` と D1 のスキーマ読み取り**（workers-sdk#15362）の再現確認。再現する場合は、Vite ＋ `wrangler dev` の二段構成を再検討する。実装フェーズ最初のタスク。
 2. **D1 上でのテーブル再作成の実挙動**（`PRAGMA foreign_keys=OFF` を含む migration が Wrangler の適用でどう扱われるか、親テーブル再作成時に子行が消えるか）。実 D1（ローカル）での実測が必要。実装フェーズ初期。
 3. **`.dev.vars` の Vite プラグインでの読み込み**と、シークレットの型付け方法（`wrangler types` の扱い）。実装フェーズ初期に確認する。
-4. **Vitest（client・shared）から Cloudflare プラグインを除外する具体的な方法**（`test.md`）。
+4. **Vitest（client・shared）から Cloudflare プラグインを除外する具体的な方法**（`test.md` 4.1 で確定済み：`vitest.config.ts` を `vite.config.ts` から独立して定義する）。
 5. **OAuth の redirect URI の導出方法（確定済み：リクエストの origin から導出。`backend.md` 5.3）**と、残る **`__Host-` Cookie の `http://localhost` での挙動**（`CONTRIBUTING.md`）。
 6. **Zod のバンドルサイズ**が FCP・Lighthouse の目標に与える影響（実装後に計測。必要なら `zod/mini` 等を検討）。
 7. **`compatibility_date`・`compatibility_flags`（`nodejs_compat`）**：`jose`・`crypto.subtle` は標準 Web API のみで完結する見込み（`backend.md` 13章）。実装フェーズ最初のタスクで確定する。
@@ -553,6 +557,6 @@ Git 純正の pre-commit の一部として、LLM を呼ばないルールベー
 9. **pre-push の LLM レビュー**のプロンプト・出力形式・所要時間とコストの実測（実装フェーズ）。
 10. **要件整合性チェックの許可リスト**の初期内容（6章の技術名とパッケージ名の対応表）。
 11. **shared の素の Zod スキーマを `@hono/zod-openapi` の `createRoute` に渡せるか**（4.2）。実装フェーズ最初のタスクで確認する。
-12. **Hono RPC の成立性**（4.5）：`OpenAPIHono` での chain の要否は一次情報で確認し**必須と確定した**（`backend.md` 3.1）。残るのは型推論のコスト、`client` の型チェックでの Workers 型の解決。実装フェーズ最初のタスクで確認し、成立しない場合は「`shared` の型＋薄い fetch ラッパ」に戻す。
+12. **Hono RPC の成立性**（4.5）：`OpenAPIHono` での chain の要否は一次情報で確認し**必須と確定した**（`backend.md` 3.1）。残るのは型推論のコスト、`client` の型チェックでの Workers 型の解決。実装フェーズ最初のタスクで確認し、成立しない場合は「`shared` の型＋薄い fetch ラッパ」に戻す。 `test.md` 5.5 の `createApp` 関数化（`AppType = ReturnType<typeof createApp>`）でも型推論が維持されることを同時に確認する。
 13. **コンテナでのビルド成果物確認**（6.4）：`vite preview` が `.dev.vars` を読み込むか、rootless Podman の警告（`/` が shared mount でない）の影響、GitHub Actions のランナーでの Podman の利用可否。実装フェーズ最初のタスクで確認する。
-14. `backend.md`・`frontend.md`・`test.md` へ引き継ぐ事項：リポジトリ層の内部構成と `userId` の必須化・種目シードの内容・OpenAPI 仕様の生成経路は `backend.md` で確定済み。RPC クライアントのラッパと共通エラーの扱いは `frontend.md` 4章で確定済み。統合テストの配置と CI での必須化・トリガー存在テスト・CHECK 制約の突合テスト・事前定義種目がある前提のテストデータ（`test.md`）は引き続き未確定。
+14. `backend.md`・`frontend.md`・`test.md` へ引き継ぐ事項：リポジトリ層の内部構成と `userId` の必須化・種目シードの内容・OpenAPI 仕様の生成経路は `backend.md` で確定済み。RPC クライアントのラッパと共通エラーの扱いは `frontend.md` 4章で確定済み。統合テストの配置と CI での必須化・トリガー存在テスト・CHECK 制約の突合テスト・事前定義種目がある前提のテストデータは `test.md`（5・9・10章）で確定済み。

@@ -84,7 +84,7 @@ sequenceDiagram
 ```
 
 - テスト（Vitest）またはビルドが失敗した場合は、マイグレーション適用・デプロイを行わず中断する。
-- PR の作成・更新時にも、シークレット検出（gitleaks）を先頭で実行し、通過後に lint・型チェック・テスト・ビルドを GitHub Actions で実行する（`docs/Design/Detailed/project-structure.md` 9.5）。デプロイは `main` へのマージ時のみ。
+- PR の作成・更新時にも、シークレット検出（gitleaks）を先頭で実行し、通過後に lint・型チェック・テスト・ビルドを GitHub Actions で実行する（`docs/Design/Detailed/project-structure.md` 9.5）。あわせて、E2E テスト（Playwright）を別ジョブで並列に実行する。E2E はデプロイのブロック要件にしない（`docs/Design/Detailed/test.md` 10.1）。デプロイは `main` へのマージ時のみ。
 - ローカルからの手動デプロイ（`wrangler deploy`）は開発時の動作確認用途として許容するが、正規のリリース経路は上記の CI/CD フローとする。ローカルからのデプロイは `wrangler login`（開発者個人の Cloudflare アカウントによる OAuth 認証）で行い、本番環境へのデプロイ権限を持つ Cloudflare API token は GitHub Actions（GitHub Secrets）にのみ保持し、開発者のローカル環境には API token を配布しない。ステージング環境がないためローカル `wrangler deploy` も本番環境（`*.workers.dev`）を対象とする点に留意し、常用しない。
 
 ## 7. データベース（D1）とマイグレーション
