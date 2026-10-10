@@ -65,7 +65,6 @@ GainLog/
 │   └── hooks/                # Git フックから呼ぶ決定論チェック（Node 標準のみ。9章）
 ├── docs/                     # 要件・設計書・ADR
 ├── .github/workflows/        # CI/CD（9章。実体は実装フェーズ最初のタスク）
-├── .storybook/               # Storybook 設定（frontend.md 12章で確定）
 ├── public/
 │   └── _headers               # 静的アセット応答への CSP 付与（frontend.md 13.2章）
 ├── index.html                # Vite のクライアントエントリ（リポジトリ直下）
@@ -304,7 +303,7 @@ export default defineConfig({
 
 - 型チェックは `tsc -b`（3.2 の tsconfig 分割）。`wrangler types` の生成物を含む。
 - Vitest はルートの `vitest.config.ts` で **api／client／shared の 3 プロジェクトに分ける**（Workers 環境・DOM 環境・Node 環境）。使用するプールやライブラリは `test.md` で確定する。
-- **規約**: `@cloudflare/vite-plugin` は `vite.config.ts` にのみ含め、Storybook と Vitest（client・shared）が Worker 用プラグインを読み込まない設定にする。Storybook 側の具体的な分離方法は `frontend.md` 12.2 章で確定済み（`.storybook/main.ts` の `viteFinal` フックでプラグイン名 `vite-plugin-cloudflare` を除外する）。Vitest 側は `test.md` で確定する。
+- **規約**: `@cloudflare/vite-plugin` は `vite.config.ts` にのみ含め、Vitest（client・shared）が Worker 用プラグインを読み込まない設定にする。具体的な分離方法は `test.md` で確定する。
 
 ### 6.4 開発環境とコンテナでのビルド成果物確認（ADR-0012）
 
@@ -508,7 +507,7 @@ Git 純正の pre-commit の一部として、LLM を呼ばないルールベー
 | `lint` / `format` / `format:check` | ESLint / Prettier |
 | `test` | `vitest run`（詳細は `test.md`） |
 | `db:generate` / `db:migrate:local` / `db:reset:local` | 8.2 |
-| `storybook` / `storybook:build` | `frontend.md` 12.3 章で確定 |
+| `e2e` | `frontend.md` 12.3 章で確定（Playwright、ADR-0017） |
 | `container:up` / `container:down` | `podman-compose up --build` / `podman-compose down`（6.4） |
 
 - 本番デプロイ用の script は設けない。正規経路は CI のみとする（`architecture.md` 6章。ローカルからの `wrangler deploy` は動作確認用途で常用しない）。
@@ -546,7 +545,7 @@ Git 純正の pre-commit の一部として、LLM を呼ばないルールベー
 1. **`@cloudflare/vite-plugin` と D1 のスキーマ読み取り**（workers-sdk#15362）の再現確認。再現する場合は、Vite ＋ `wrangler dev` の二段構成を再検討する。実装フェーズ最初のタスク。
 2. **D1 上でのテーブル再作成の実挙動**（`PRAGMA foreign_keys=OFF` を含む migration が Wrangler の適用でどう扱われるか、親テーブル再作成時に子行が消えるか）。実 D1（ローカル）での実測が必要。実装フェーズ初期。
 3. **`.dev.vars` の Vite プラグインでの読み込み**と、シークレットの型付け方法（`wrangler types` の扱い）。実装フェーズ初期に確認する。
-4. **Vitest（client・shared）から Cloudflare プラグインを除外する具体的な方法**（`test.md`）。Storybook 側は `frontend.md` 12.2 章で確定済み。
+4. **Vitest（client・shared）から Cloudflare プラグインを除外する具体的な方法**（`test.md`）。
 5. **OAuth の redirect URI の導出方法（確定済み：リクエストの origin から導出。`backend.md` 5.3）**と、残る **`__Host-` Cookie の `http://localhost` での挙動**（`CONTRIBUTING.md`）。
 6. **Zod のバンドルサイズ**が FCP・Lighthouse の目標に与える影響（実装後に計測。必要なら `zod/mini` 等を検討）。
 7. **`compatibility_date`・`compatibility_flags`（`nodejs_compat`）**：`jose`・`crypto.subtle` は標準 Web API のみで完結する見込み（`backend.md` 13章）。実装フェーズ最初のタスクで確定する。
