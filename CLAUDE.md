@@ -6,7 +6,7 @@ GainLog プロジェクトの作業を行う際の共通コンテキスト。個
 
 GainLog は、日々の筋力トレーニング（種目・重量・回数・セット）を記録し、種目別の自己ベストを自動表示して成長を実感できる個人向け Web アプリケーション。実質的に単一ユーザー・低トラフィックの利用を想定する。
 
-- 現在のフェーズ: **詳細設計**（基本設計は完了し main にマージ済み）
+- 現在のフェーズ: **実装準備**（基本設計・詳細設計は完了し main にマージ済み。コードは未実装）
 - Phase 1（MVP）の範囲のみを対象とする。Phase 2 機能は設計・実装しない。
 
 ## ドキュメント地図
@@ -15,7 +15,7 @@ GainLog は、日々の筋力トレーニング（種目・重量・回数・セ
 |---|---|
 | `docs/Requirements/requirement.md` | 要件定義書。仕様の最上位の正。スコープ・非目標・技術スタックはここが基準 |
 | `docs/Design/Basic/` | 基本設計書（6種）。`db` / `screens` / `openapi.yaml` / `auth` / `architecture` / `common-spec` |
-| `docs/Design/Detailed/` | 詳細設計書。`project-structure` / `backend` / `frontend` / `test`（作成中） |
+| `docs/Design/Detailed/` | 詳細設計書。`project-structure` / `backend` / `frontend` / `test`（4本とも作成済み） |
 | `docs/adr/` | 設計判断の記録（Architecture Decision Records） |
 
 ### 鉄則
@@ -48,7 +48,7 @@ GainLog は、日々の筋力トレーニング（種目・重量・回数・セ
 
 - 実装は **t-wada 流の TDD**（テストファースト / Red-Green-Refactor / TODO リスト駆動 / 三角測量）で進める。詳細は `docs/Design/Detailed/test.md`。適用範囲（振る舞いが変わらない軽微な修正は TDD 不要）は同 2.4。
 - ディレクトリ構成は単一パッケージ（`src/api` / `src/client` / `src/shared`）を前提とする。詳細（Worker エントリポイントの配置を含む）は `docs/Design/Detailed/project-structure.md`。
-- 詳細設計フェーズでは、設計書を1本ずつブランチを切って作成し PR を出す。
+- 詳細設計フェーズでは、設計書を1本ずつブランチを切って作成し PR を出した（完了）。
 - コミット・push 前の検査（pre-commit: gitleaks・禁止ファイルガード・lint・型・関連テスト・要件整合性・migration 再作成ガード、pre-push: LLM レビュー）の方針は `docs/Design/Detailed/project-structure.md` 9章で定めた。ツールの導入は実装フェーズ最初のタスクのため、**現時点では未導入**。
 - マイグレーションは `drizzle-kit generate` で生成する。drizzle-kit がテーブル再作成 SQL（`__new_` / `DROP TABLE`）を生成した場合、トリガー消失や CASCADE のリスクがあるため、`project-structure.md` 8.3 の規約に従う（検出は同 9.2）。
 
