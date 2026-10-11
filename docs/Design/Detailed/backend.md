@@ -194,7 +194,7 @@ flowchart LR
 | 2 | `container` | `c.env.DB` から Drizzle クライアントを作り、リポジトリ実装・`Clock`・`IdGenerator` を組み立てて `c.var` に注入する（composition root、4.1）。**`sessionAuth` がリポジトリを使うため、認証より先に置く** |
 | 3 | `secFetchSite` | `auth.md` 9章の実装。対象は `/api/*` の `POST`/`PUT`/`PATCH`/`DELETE` かつ `GET /api/auth/login`・`GET /api/auth/callback` を除く。`Sec-Fetch-Site` が `same-origin`/`none` 以外なら403、ヘッダ欠落は許容 |
 | 4 | `jsonContentType` | 上記と同じ対象範囲で `Content-Type: application/json` を必須化（CSRF対策の一部、`auth.md` 9章） |
-| 5 | `sessionAuth` | `GET /api/auth/login`・`GET /api/auth/callback` を除く全 `/api/*` に適用。`__Host-session` Cookie を読み、ハッシュ化して `SessionRepository` で検証（無操作24h・絶対30日、`auth.md` 6章）。成功時は `c.var.user`（`userId`）を設定し、`last_accessed_at` を5分間隔で間引き更新（`c.executionCtx.waitUntil()` で非同期に行い、レスポンスを待たせない）。失敗時は 401 |
+| 5 | `sessionAuth` | `GET /api/auth/login`・`GET /api/auth/callback` を除く全 `/api/*` に適用。`__Host-session` Cookie を読み、ハッシュ化して `SessionRepository` で検証（`now > expires_at` で期限切れ。固定24時間、`auth.md` 6章）。成功時は `c.var.user`（`userId`）を設定する。期限切れ・不明なセッションは行を削除して 401 |
 
 `GET /api/auth/me` は「未認証でも 200（`{ authenticated: false }` 相当）を返す」仕様であれば `sessionAuth` の対象外にする必要があるが、openapi.yaml の `/auth/me` は 401 レスポンスの定義を持たないため、**`sessionAuth` の対象に含め、未認証時は他の JSON API と同じ 401 を返す**方針とする（フロントは 401 をログイン画面遷移として扱う既存方針と整合する）。
 

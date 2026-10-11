@@ -224,7 +224,7 @@ flowchart LR
 **配置と命名**：`src/api/interface/routes/<resource>.routes.test.ts`（routes の隣。`auth.routes.test.ts`・`exercises.routes.test.ts`・`records.routes.test.ts`）。ミドルウェアは `src/api/interface/middleware/<name>.test.ts`。所有者チェック横断のみ `src/api/interface/ownership.test.ts`（5.6）。
 
 - アプリ全体（ミドルウェア〜ルート〜リポジトリ〜実 D1）を、`app.request()`（Hono のテスト用ヘルパー）で呼び出して検証する。
-- **差し替えるのは外部境界のみ**：`IdTokenVerifier`・`GoogleOAuthClient`（Google の token endpoint 呼び出し）。`Clock`・`IdGenerator`・リポジトリは**本物を使う**。時刻に依存する観点（セッションの無操作・絶対期限）は、**DB に過去の時刻を持つセッション行を直接 INSERT する**ことで再現する（`Clock` を差し替えない）。
+- **差し替えるのは外部境界のみ**：`IdTokenVerifier`・`GoogleOAuthClient`（Google の token endpoint 呼び出し）。`Clock`・`IdGenerator`・リポジトリは**本物を使う**。時刻に依存する観点（セッションの24時間期限）は、**DB に過去の時刻を持つセッション行を直接 INSERT する**ことで再現する（`Clock` を差し替えない）。
 - そのため、アプリ生成を関数化して外部境界を差し替え可能にする（`createApp({ idTokenVerifier, googleOAuthClient })`。`export default` は本番の組み立て、`AppType` は `ReturnType<typeof createApp>`。`backend.md` 3.1 への追従が必要。14章）。
 - 認証済みリクエストは、ビルダーで users・sessions を作り、生トークンを `Cookie: __Host-session=<token>` として付ける（ログインフローを毎回通さない）。
 - 状態変更系には `Content-Type: application/json` と `Sec-Fetch-Site: same-origin` を付けるヘルパーを用意する（付けないケースは専用テストで確認）。
@@ -245,7 +245,7 @@ flowchart LR
 | 領域 | 観点 |
 |---|---|
 | 認証フロー（`auth.routes.test.ts`） | ①`/login`：`__Host-oauth_txn` を発行（HttpOnly・Secure・SameSite=Lax・Path=/・Domain なし）し、Google の認可 URL へ 302（`state`・`nonce`・`redirect_uri` を含む）②redirect URI は origin の許可リスト外なら `invalid_request`（`backend.md` 5.3）③`/callback`：`state` 不一致・Cookie 欠落 → `/login?error=invalid_request`／ID トークン不正 → `invalid_token`／allowlist 外 → `not_allowed`／成功 → セッション Cookie 発行＋302 `/`。一時 Cookie が失効される ④成功時、DB に保存されるのは**生トークンではなくハッシュ**（SHA-256 の16進数）⑤`/logout`：204、**存在しないセッションでも 204（冪等）**、以後同じ Cookie で 401 ⑥`/me`：認証済みで 200、未認証で 401 |
-| セッション（`session-auth.test.ts`） | 無操作24時間超過 → 401＋行の削除／絶対30日超過 → 401＋行の削除（`last_accessed_at` が新しくても絶対期限は延長されない）／`last_accessed_at` の更新が5分未満では行われず、5分以上経過していれば更新される |
+| セッション（`session-auth.test.ts`） | `expires_at` 以前 → 通過／`expires_at` 超過（作成から24時間超）→ 401＋行の削除／存在しないセッション → 401（過去の `expires_at` を持つ行を直接 INSERT して検証する。227行目の方針） |
 | CSRF（`sec-fetch-site.test.ts`・`json-content-type.test.ts`） | 状態変更 API で `Sec-Fetch-Site: cross-site` → 403、`same-origin`・`none`・ヘッダ欠落 → 通過。`Content-Type` が JSON でない → 拒否。`GET /api/auth/login`・`/callback` は対象外（`backend.md` 4章） |
 | 種目（`exercises.routes.test.ts`） | 一覧に事前定義＋自分の種目のみ／名前重複 → 409／事前定義の編集・削除 → 403／使用中の削除 → 409／他人の種目 → 404／`best-set`（5.2.1 の結果が API 経由で返る。`excludeDate` に該当記録がなければ除外なし） |
 | 記録（`records.routes.test.ts`） | 記録のない日の `GET /records/{date}` は **200 で `exercises: []`**／`POST /records/{date}/exercises` の同日同種目重複 → 409、見えない種目 → 404／3粒度の削除（日・種目・セット）と、**セット0件化による記録の自動削除**（カレンダーに空の記録日が出ない：`GET /records` に含まれない）／`set_number` の重複 → 409／`PATCH` で `set_number` を重複値に変更 → 409／`from > to` → 400 |
@@ -343,7 +343,7 @@ ADR-0017 の採用を受け、`frontend.md` 12章の「対象シナリオ・実�
 Google ログインは実際には通せないため、**セッションを直接用意する**。
 
 1. テストごとに、固有の `google_sub`・email のユーザーを `users` へ INSERT する。
-2. 生トークン（十分に長いランダム値）を生成し、**SHA-256 の16進数ハッシュ**（`db.md` 5.2）を `sessions.id` として INSERT する（`expires_at` は未来、`last_accessed_at` は現在）。
+2. 生トークン（十分に長いランダム値）を生成し、**SHA-256 の16進数ハッシュ**（`db.md` 5.2）を `sessions.id` として INSERT する（`expires_at` は未来）。
 3. 生トークンを `__Host-session` Cookie として、Playwright の `context.addCookies`（`secure: true`・`path: '/'`・`domain` なし相当・`httpOnly: true`）で注入する。
 4. SQL の実行は、`wrangler d1 execute gainlog --local --command/--file` を呼ぶ補助関数（`e2e/support/db.ts`）で行う。**ローカル D1 の状態は Wrangler と Vite プラグインが `.wrangler/state` を共有する**（`project-structure.md` 6.1）ことに依拠する。
 
@@ -466,7 +466,7 @@ Google ログインは実際には通せないため、**セッションを直�
 | 2 | allowlist 外の Google アカウントでのログインは拒否される | 5.1（`CompleteLoginUseCase`）・5.5（`/callback` → `not_allowed`）・5.2（大文字小文字を区別しない照合）・5.3（`allowlist.email` の UNIQUE） | – |
 | 3 | state・nonce・ID トークン（署名・issuer・audience・有効期限）がサーバー側で検証され、不正は拒否される | 5.4（ID トークン検証の全観点）・5.5（`state` 不一致・Cookie 欠落 → `invalid_request`、トークン不正 → `invalid_token`） | – |
 | 4 | 未認証のアクセス、および他ユーザーのリソースへの操作は全 API で拒否される | 5.6（未認証の全 `/api/*` が 401、他ユーザーのリソースが 404／403、ルート一覧の網羅検査）・5.2（所有者による絞り込み）／7.3 シナリオ1（未認証リダイレクト） | – |
-| 5 | 一定時間操作がない場合、セッションが無効化され再ログインが必要になる | 5.5 セッション（無操作24時間・絶対30日・`last_accessed_at` の間引き）／6.3（401 → `/login`） | – |
+| 5 | ログインから24時間が経過すると、セッションが無効化され再ログインが必要になる | 5.5 セッション（固定24時間の期限）／6.3（401 → `/login`） | – |
 | 6 | ログアウトによりセッションが破棄され、再ログインが必要になる | 5.5（`/logout` の204・冪等・以後の401）／6.3（ログアウト後の `clear()` と遷移）／7.3 シナリオ5 | – |
 | 7 | ある日の筋トレ記録を作成・保存できる | 5.5（記録・種目ブロック・セットの作成）・5.2（`batch` の原子性）／6.3（ミューテーションと invalidate）／7.3 シナリオ2 | – |
 | 8 | 保存した記録を詳細表示・編集・削除できる | 5.5（`GET`・`PATCH`・`DELETE`）／6.2（表示・編集モード）／7.3 シナリオ2 | – |
