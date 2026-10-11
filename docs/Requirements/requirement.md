@@ -113,9 +113,13 @@ GainLog は、日々の筋力トレーニング（種目・重量・回数・セ
 ## 6. 非機能要件
 
 ### 技術スタック
-- **Backend**: TypeScript, Hono, Zod, OpenAPI, Valibot, Vitest, Drizzle ORM
-- **Frontend**: TypeScript, React, TailwindCSS, Valibot, Vitest, Storybook
+- **Backend**: TypeScript, Hono, Zod, `@hono/zod-openapi`, OpenAPI, Vitest, Drizzle ORM（drizzle-kit）, `jose`（Google ID トークン検証。`docs/Design/Detailed/backend.md` 5.1 章、ADR-0014）
+- **Frontend**: TypeScript, React, Vite, TailwindCSS（`@tailwindcss/vite`）, Zod, Vitest, React Router, TanStack Query（`docs/Design/Detailed/frontend.md` 1章、ADR-0015）, `@playwright/test`（E2E。`docs/Design/Detailed/frontend.md` 1章、ADR-0017）
+- **テスト**: Vitest 5, `@cloudflare/vitest-plugin`（API を workerd・ローカル D1 上でテスト）, jsdom, React Testing Library（`@testing-library/react`・`@testing-library/dom`・`@testing-library/user-event`・`@testing-library/jest-dom`）, MSW（`msw`。クライアントの API 差し替え）, カバレッジ（`@vitest/coverage-v8` または `@vitest/coverage-istanbul`。プロバイダは実装時に確定）（`docs/Design/Detailed/test.md` 1・4章、ADR-0018）。E2E の `@playwright/test` は Frontend に記載
 - **DB**: Cloudflare D1（SQLite 互換）
+- **ビルド・開発・品質管理**: Vite（`@cloudflare/vite-plugin`）, Wrangler, pnpm, ESLint, Prettier, Lefthook, gitleaks
+- **コンテナ（ビルド成果物の確認用）**: Podman, podman-compose（Containerfile / Compose Spec）。開発自体はコンテナを使わない（ADR-0012）
+- バリデーションは Zod に統一し、スキーマは `src/shared` で API・UI が共有する（ADR-0008）。詳細な選定・バージョン方針は `docs/Design/Detailed/project-structure.md` 1章。
 
 ### デプロイ
 - Cloudflare Workers 上にデプロイし、任意の場所・端末からアクセス可能とする。
@@ -161,7 +165,7 @@ GainLog は、日々の筋力トレーニング（種目・重量・回数・セ
 - allowlist に含まれない Google アカウントでのログインは拒否される。
 - OAuth 2.0 / OIDC のログインフローにおいて、state・nonce・ID トークン（署名・issuer・audience・有効期限）がサーバー側で検証され、不正なリクエストは拒否される。
 - 未認証状態でのアクセス、および他ユーザーが所有する記録・種目への操作は、すべての API で拒否される（所有者チェック）。
-- 一定時間操作がない場合、セッションが無効化され再ログインが必要になる。
+- ログインから24時間が経過すると、セッションが無効化され再ログインが必要になる。
 - ログアウト操作によりセッションが破棄され、以降は再ログインが必要になる。
 - ある日の筋トレ記録（種目・セットごとの重量・回数）を作成・保存できる。
 - 保存した記録を詳細表示・編集・削除できる。

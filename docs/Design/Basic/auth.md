@@ -24,7 +24,7 @@ GainLog では、Hono API が OAuth クライアントの役割を一手に担�
 - フロントエンド・バックエンドが同一オリジン構成のため、Cookie ベースの認証で CORS の複雑さ（`Access-Control-Allow-Credentials` 等の設定）を回避できる。
 - サーバーサイドセッションのため、ログアウトや強制失効を即座に反映できる（自己完結型 JWT のような失効の難しさがない）。
 
-なお、HttpOnly はトークン値の読み取り・持ち出しを防ぐだけであり、XSS そのものの影響を封じ込めるものではない。同一オリジンで任意の JavaScript が実行される状態になった場合、そのスクリプトは被害者のセッション Cookie がブラウザによって自動付与されることを利用し、認証済み API（`/api/records` 等）を直接呼び出して記録データの閲覧・改ざん・削除を行える。したがって XSS 発生時の被害範囲は「トークン持ち出しによる別環境からの永続的乗っ取り」までは軽減されるが、「セッションが有効な間、同一オリジン上で API 経由の操作をすべて実行される」リスクは残る。この残存リスクへの対策は HttpOnly ではなく、XSS の発生自体を防ぐこと（React のデフォルトエスケープの維持、`dangerouslySetInnerHTML` を使わない、CSP 導入の検討等。フロントエンド実装スコープ）に依存する。
+なお、HttpOnly はトークン値の読み取り・持ち出しを防ぐだけであり、XSS そのものの影響を封じ込めるものではない。同一オリジンで任意の JavaScript が実行される状態になった場合、そのスクリプトは被害者のセッション Cookie がブラウザによって自動付与されることを利用し、認証済み API（`/api/records` 等）を直接呼び出して記録データの閲覧・改ざん・削除を行える。したがって XSS 発生時の被害範囲は「トークン持ち出しによる別環境からの永続的乗っ取り」までは軽減されるが、「セッションが有効な間、同一オリジン上で API 経由の操作をすべて実行される」リスクは残る。この残存リスクへの対策は HttpOnly ではなく、XSS の発生自体を防ぐこと（React のデフォルトエスケープの維持、`dangerouslySetInnerHTML` を使わない、CSP 導入の検討等）に依存する。具体的な対策は `docs/Design/Detailed/frontend.md` 13章で確定済み（`dangerouslySetInnerHTML` の lint 禁止、Phase 1 での CSP 導入）。
 
 ```mermaid
 flowchart LR
@@ -82,7 +82,7 @@ sequenceDiagram
                 Hono-->>Browser: 302 /login?error=not_allowed
             else allowlist内
                 Hono->>D1: users を sub で検索、無ければJIT作成
-                Hono->>D1: sessions に新規セッション作成（user_id, hash(token), created_at, expires_at=+30d, last_accessed_at）
+                Hono->>D1: sessions に新規セッション作成（user_id, hash(token), created_at, expires_at=+24h）
                 Hono-->>Browser: 一時Cookie削除 ＋ Set-Cookie（session）＋ 302 /
             end
         end
@@ -91,7 +91,7 @@ sequenceDiagram
 
 - state 値は検証に使用した時点で D1 または一時 Cookie 上から消費・無効化し、同一 state を使ったリプレイ攻撃を防ぐ（ワンタイム利用）。
 - ID トークン検証は署名（JWKS）・issuer・audience・有効期限（exp）・nonce に加え、`email_verified` クレームが `true` であることも必須条件とする。未検証のメールアドレスでの登録を防ぐため。
-- ID トークン検証に用いるライブラリ（JWKS 取得・キャッシュ方式含む）の選定は実装時に定めるものとし、本書のスコープ外とする。
+- ID トークン検証に用いるライブラリ（JWKS 取得・キャッシュ方式含む）の選定は実装時に定めるものとし、本書のスコープ外とする（`docs/Design/Detailed/backend.md` 5.1 で `jose` に確定。ADR-0014）。
 
 ## 4. allowlistの設計
 
@@ -114,7 +114,7 @@ sequenceDiagram
 
 ### allowlist からの削除時の運用手順
 
-- allowlist からメールアドレスを削除しても、既に発行済みのセッション（無操作 24 時間・絶対有効期限 30 日）は自動的には失効しない。緊急に特定アカウントのアクセスを遮断したい場合は、allowlist からの削除に加えて、該当 `user_id` に紐づく `sessions` テーブルの行も手動で削除する（`wrangler d1 execute` 等）。この 2 手順をセットで行うことを運用手順として明記する。
+- allowlist からメールアドレスを削除しても、既に発行済みのセッション（ログインから 24 時間の固定有効期限）は自動的には失効しない。緊急に特定アカウントのアクセスを遮断したい場合は、allowlist からの削除に加えて、該当 `user_id` に紐づく `sessions` テーブルの行も手動で削除する（`wrangler d1 execute` 等）。この 2 手順をセットで行うことを運用手順として明記する。
 
 ## 5. ユーザー（User）テーブルとの関係
 
@@ -135,15 +135,13 @@ sequenceDiagram
 |---|---|
 | `id` | セッショントークンのハッシュ値（SHA-256等）。Cookie自体には生トークンのみを持たせ、DBには生トークンを保存しない |
 | `user_id` | `users.id` への外部キー |
-| `created_at` | セッション作成日時（絶対有効期限の起点） |
-| `expires_at` | 絶対有効期限（作成時に `created_at + 30日` で固定し、以降更新しない） |
-| `last_accessed_at` | 直近アクセス日時（無操作タイムアウト24時間の判定に使用。認証済みリクエストのたびに更新） |
+| `created_at` | セッション作成日時（有効期限の起点） |
+| `expires_at` | 有効期限（作成時に `created_at + 24時間` で固定し、以降更新しない） |
 
 - **生トークンをハッシュ化して保存する理由**：D1 のバックアップ流出や SQL インジェクション等でテーブル内容が漏洩しても、Cookie（ブラウザ側）を盗まない限りなりすましができないようにするため。
-- **タイムアウトの実装方法**：
-  - 無操作24時間：リクエストごとに `now - last_accessed_at > 24h` を判定し、超過していれば401＋セッション削除。
-  - 絶対30日：`now > expires_at` を判定し、超過していれば401＋セッション削除。`expires_at` は作成時に固定し、`last_accessed_at` の更新に連動して延長しない（無操作していなくても30日で必ず再ログインが必要という仕様）。
-  - `last_accessed_at` の更新はリクエストごとに毎回D1へ書き込むとコスト・レイテンシが増えるため、一定間隔（例：5分に1回程度）に間引いて更新する。この間引きにより保存値は実際の最終アクセスより最大で間引き間隔ぶん（例：約5分）古くなりうるため、無操作24時間タイムアウトは最大で約5分早く発火しうる。この誤差（間引き間隔ぶんの前倒し）を許容仕様とする。
+- **有効期限の実装方法**：
+  - ログインから24時間の固定期限とし、リクエストごとに `now > expires_at` を判定して、超過していれば401＋セッション削除。`expires_at` は作成時に固定し、アクセスによって延長しない（使用中であっても24時間後には再ログインが必要という仕様）。
+  - 無操作タイムアウトは設けない。単一ユーザーで1日1回の再ログイン（Googleアカウントの選択のみ）で足りるため、判定と `last_accessed_at` の更新（D1への書き込み）を省いてシンプルにする（ADR-0005 の2026-10改訂）。
   - 期限切れセッション行の物理削除は、検出時の遅延削除（lazy deletion）で十分とし、Cron Triggerによる定期クリーンアップはPhase 2以降の検討事項とする。
 
 ### Cookie属性
@@ -155,7 +153,7 @@ sequenceDiagram
 | Secure | 有効 | HTTPS以外での送信を防ぐため（Cloudflare Workersは常時HTTPSのため実質デメリットなし） |
 | SameSite | `Lax` | 同一オリジン構成のためAPI呼び出しは常にsame-site。Laxはクロスサイトの単純POST（フォームベースCSRF）を防ぎつつ、通常利用に支障がない |
 | Path | `/` | API・SPAとも同一オリジン内の広い範囲で必要なため |
-| Max-Age | 30日相当 | 絶対有効期限と合わせる。ただし実際の失効判定は常にサーバー側（D1の`expires_at`）で行い、Cookieの有効期限はUX上のヒントに過ぎない |
+| Max-Age | 24時間相当 | 有効期限と合わせる。ただし実際の失効判定は常にサーバー側（D1の`expires_at`）で行い、Cookieの有効期限はUX上のヒントに過ぎない |
 
 ### OAuth一時Cookie（state・nonce保持用）
 
@@ -173,7 +171,7 @@ sequenceDiagram
 
 - `POST /api/auth/logout` の処理内容：Cookieからトークンを読み取りハッシュ化、該当する`sessions`行をDELETE、Cookieを失効させるSet-Cookie（Max-Age=0、他の属性は発行時と同一）を返す。
 - 冪等性：既にセッションが存在しない・期限切れの場合でも成功（204等）として扱い、エラーにしない（情報漏洩防止・UX上の理由）。
-- ログアウト後、SPA側はローカルの状態をクリアしログイン画面へ遷移する（詳細はフロントエンド実装のスコープ）。
+- ログアウト後、SPA側はローカルの状態をクリアしログイン画面へ遷移する（実装は `docs/Design/Detailed/frontend.md` 5.4章で確定済み：`queryClient.clear()` の後にログイン画面へ遷移）。
 
 ## 8. 認可（所有者チェック）
 
@@ -187,7 +185,7 @@ sequenceDiagram
 追加のCSRFトークンは導入せず、以下の組み合わせによる多層防御で対策する。
 
 1. セッションCookieの`SameSite=Lax`により、クロスサイトの単純フォームPOST等ではCookieが送信されない。
-2. 状態変更API（POST/PUT/DELETE）は`Content-Type: application/json`を必須とし、HTMLの`<form>`タグでは`application/json`を送信できない（送信可能なContent-TypeはHTML仕様上限定されている）ため、クロスサイトの単純フォーム攻撃が成立しない。
+2. JSONボディを受ける状態変更API（POST/PUT/PATCH）は`Content-Type: application/json`を必須とし、HTMLの`<form>`タグでは`application/json`を送信できない（送信可能なContent-TypeはHTML仕様上限定されている）ため、クロスサイトの単純フォーム攻撃が成立しない。ボディを持たない`POST /api/auth/logout`と`DELETE`系は対象外とする（HTMLフォームは`DELETE`を送れず、クロスオリジンの`DELETE`はプリフライトで拒否され、クロスサイトの`POST /logout`は1.によりCookieが送られないため）。
 3. 同一オリジン構成のためCORSを許可しておらず（`Access-Control-Allow-Origin`を設定しない）、他オリジンの`fetch`/`XHR`からのクロスオリジンリクエストはブラウザのCORSポリシーによりレスポンスを読めない。書き込み系はプリフライトが発生し、サーバー側がプリフライトを許可しなければリクエスト自体が成立しない。
 
 4. 状態変更API（`/api/*`のPOST/PUT/DELETE）に対し、`Sec-Fetch-Site`リクエストヘッダを検証し、値が`same-origin`および`none`（ユーザーのブックマーク・アドレスバー直接入力等）以外（`same-site`/`cross-site`）の場合は`403`を返す。ヘッダ自体が存在しない場合は、古いブラウザとの互換のため拒否しない（上記1〜3で担保する）。
@@ -212,7 +210,7 @@ CSRFトークン（Synchronizer Token等）を導入しない理由：BFF構成�
 | 他ユーザー所有リソースへのアクセス | JSON API | `404 Not Found`（8章参照） |
 | バリデーションエラー等 | JSON API | 認証・認可起因以外は本書のスコープ外 |
 
-- SPA側は`401`をグローバルに検知してログイン画面へ誘導する想定である（フロントエンド実装の詳細は別スコープ）。
+- SPA側は`401`をグローバルに検知してログイン画面へ誘導する想定である（実装は `docs/Design/Detailed/frontend.md` 5.1章で確定済み：TanStack Query の `QueryCache`/`MutationCache` の `onError` で横断的に検知）。
 - ログイン失敗時のエラー理由は、URLクエリパラメータに詳細な理由（例：具体的なメールアドレス）を含めない（ブラウザ履歴・リファラ等への漏洩防止）。
 - **ログ出力方針**：詳細なエラーログはCloudflare Workersのログに出力するが、IDトークン・セッショントークン（生値・ハッシュ値問わず）・メールアドレス等のPIIは平文でログに出力しない。必要な場合はマスキングした値（例：メールアドレスの一部伏字）や、突合用の内部ID等の非PII値のみを出力する。
 
@@ -221,7 +219,7 @@ CSRFトークン（Synchronizer Token等）を導入しない理由：BFF構成�
 | 脅威 | 対策 | 該当章 |
 |---|---|---|
 | XSSによるセッショントークンの持ち出し | HttpOnly Cookie（トークン値のJS読み取り防止。ブラウザ外への持ち出し・別環境からの永続的ななりすましを防ぐ） | 6章 |
-| XSS発生時の同一オリジンでの認証済みAPI悪用（セッション相乗り） | XSSの発生自体を防ぐ（フロントエンド実装でのエスケープ徹底・CSP検討等）。HttpOnlyでは防げない | 2章・フロントエンド実装スコープ |
+| XSS発生時の同一オリジンでの認証済みAPI悪用（セッション相乗り） | XSSの発生自体を防ぐ（フロントエンド実装でのエスケープ徹底・CSP導入等）。HttpOnlyでは防げない | 2章、`docs/Design/Detailed/frontend.md` 13章 |
 | セッション固定化・リプレイ | ランダムトークン＋DBハッシュ保存＋有効期限 | 6章 |
 | CSRF | SameSite＋Content-Type制約＋CORS非許可＋Sec-Fetch-Site検証（状態変更API限定） | 9章 |
 | オープンリダイレクト（コールバック悪用） | redirect_uriの完全一致・stateによる紐付け・stateのワンタイム化 | 3章 |
@@ -233,7 +231,7 @@ CSRFトークン（Synchronizer Token等）を導入しない理由：BFF構成�
 
 ### 意図的に採用しなかった対策とその理由
 
-- **Google refresh tokenの保持**：長期ログイン維持は自前セッション（D1）のみで行い、refresh tokenは保持しない。実装・運用がシンプルになる一方、Googleアカウント側の失効を即座に検知できないトレードオフがあるが、本アプリの規模では自前セッションの絶対有効期限（30日）で十分カバーできると判断した。
+- **Google refresh tokenの保持**：長期ログイン維持は自前セッション（D1）のみで行い、refresh tokenは保持しない。実装・運用がシンプルになる一方、Googleアカウント側の失効を即座に検知できないトレードオフがあるが、本アプリの規模では自前セッションの有効期限（24時間）で十分カバーできると判断した。
 - **CSRFトークン（Synchronizer Token）**：BFF構成・同一オリジンのため、SameSite＋Content-Type制約＋CORS非許可＋Sec-Fetch-Site検証の多層防御で十分と判断し、実装コストの高いCSRFトークン方式は採用しなかった。
 - **allowlistメールアドレスのpepper付きハッシュ化**：実質数名規模の個人アプリであり、DBダンプ漏洩時の実害（少数のメールアドレス漏洩）とハッシュ化・pepper管理の実装コストを比較し、Phase 1では平文保存＋パラメータ化クエリ徹底で十分と判断した。将来的に利用者数が増える場合は再検討する。
 
@@ -266,9 +264,9 @@ D1（SQLiteベース）にはPostgreSQLのようなDBエンジン側のRow Level
 
 ### 詳細設計で確定すべき項目一覧
 
-- [ ] リポジトリ層のディレクトリ構成・命名規則（例：`src/repositories/*.ts`）
-- [ ] リポジトリ関数のシグネチャ規約（`userId`を第一引数に固定する等）
-- [ ] ハンドラから直接Drizzleクエリを呼び出すことを禁止するLintルールの要否・具体的な実装方法
-- [ ] 所有者チェック対象リソース一覧（`WorkoutRecord`・`WorkoutSet`・ユーザー追加`Exercise`等）の網羅的な洗い出し
-- [ ] 事前定義データ（`owner_user_id`がnull、8章の例外ケース）に対する分岐処理をリポジトリ層でどう表現するか
-- [ ] 統合テストの配置・命名規約、およびCIでの実行必須化の要否
+- [x] リポジトリ層のディレクトリ構成・命名規則（`src/api` 配下に置く。`docs/Design/Detailed/project-structure.md` 2章。内部はオニオンアーキテクチャの `infrastructure/repositories/` に確定。`docs/Design/Detailed/backend.md` 2章、ADR-0013）
+- [x] リポジトリ関数のシグネチャ規約（`userId`を第一引数に固定。例外は `docs/Design/Detailed/backend.md` 6.1）
+- [x] ハンドラから直接Drizzleクエリを呼び出すことを禁止するLintルールの要否・具体的な実装方法（ESLint の `no-restricted-imports` を層ごとに設定。`infrastructure/**` 以外での `drizzle-orm*` 禁止。`docs/Design/Detailed/backend.md` 2.4）
+- [x] 所有者チェック対象リソース一覧（`docs/Design/Detailed/backend.md` 6.2 で網羅）
+- [x] 事前定義データ（`owner_user_id`がnull、8章の例外ケース）に対する分岐処理（404/403の使い分け。`docs/Design/Detailed/backend.md` 6.3）
+- [x] 統合テストの配置・命名規約、およびCIでの実行必須化の要否（`docs/Design/Detailed/test.md` 5.5・5.6・9.1・10.1 で確定。routes の隣に配置し、Vitest の全 projects は PR・main とも必須）
