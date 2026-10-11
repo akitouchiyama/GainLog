@@ -37,7 +37,7 @@
 | TDD の運用 | TODO リストは `it.todo`。コミットは Green 単位と Refactor 単位（Red はコミットしない） | 2章 |
 | API 統合テストの配置 | `interface/routes/*.routes.test.ts`（routes の隣）。所有者チェック横断のみ `interface/ownership.test.ts` に集約 | 5・9章 |
 | E2E の認証 | ローカル D1 に users／sessions を直接 INSERT し、生トークンを `__Host-session` Cookie として注入する。本番コードにテスト用の分岐を置かない。ADR-0019 | 7章 |
-| E2E の実行 | PR ごとに CI で実行（主要5シナリオ＋モバイル viewport）。デプロイのブロック要件にはしない | 7・10章 |
+| E2E の実行 | PR ごとに CI で実行（主要5シナリオ＋モバイル viewport）。**PR の必須チェック**とし、通らなければマージ（＝デプロイ）できない。`main` マージ時は再実行しない | 7・10章 |
 | カバレッジ | 計測のみで閾値は設けない | 10章 |
 | 非機能の受入条件 | 性能目標・実機スマホは手動確認手順として定義する | 12章 |
 
@@ -438,9 +438,9 @@ Google ログインは実際には通せないため、**セッションを直�
 | PR | gitleaks（先頭・独立） | – |
 | PR | 検査ジョブ（`needs: gitleaks`） | lint → 型チェック → **Vitest（全 projects：shared・api・client）** → ビルド |
 | PR | E2E ジョブ（`needs: gitleaks`。検査ジョブ・コンテナビルドジョブと並列） | **Playwright（7章。desktop・mobile）**。ブラウザは Chromium のみインストールする |
-| `main` マージ | テスト → ビルド → マイグレーション → デプロイ | **Vitest のみ**。失敗したらデプロイを中断する（ADR-0003）。E2E は実行しない（PR で確認済みのため。デプロイをブロックしない） |
+| `main` マージ | テスト → ビルド → マイグレーション → デプロイ | **Vitest のみ**。失敗したらデプロイを中断する（ADR-0003）。E2E は再実行しない（PR の必須チェックで確認済みのため。E2E が通っていない変更は、そもそも `main` にマージできない） |
 
-- **auth.md 13章「CI での実行必須化の要否」の回答**：Vitest の全 projects（API 統合・所有者チェック横断を含む）は **PR・main とも必須**（失敗したらマージ・デプロイさせない）。E2E は PR で実行して結果を表示するが、**デプロイのブロック要件にはしない**。PR の必須チェック（Branch protection）に含めるかどうかは GitHub の設定であり、`CONTRIBUTING.md` で手順化する（`project-structure.md` 9.5）。
+- **auth.md 13章「CI での実行必須化の要否」の回答**：Vitest の全 projects（API 統合・所有者チェック横断を含む）は **PR・main とも必須**（失敗したらマージ・デプロイさせない）。E2E も **PR の必須チェック**とする（通らなければマージ＝デプロイができない）。`main` マージ時に再実行しないのは、PR の最新コミットで通過済みであることをマージ条件で保証するため。そのため Branch protection で「必須チェックの通過」と「マージ前にブランチを最新化（Require branches to be up to date）」を有効にする。この設定は GitHub 側の設定であり、`CONTRIBUTING.md` で手順化する（`project-structure.md` 9.5）。
 - 所有者チェック横断テスト（5.6）は Vitest の `api` プロジェクトに含まれるため、**特別な扱いなく必須チェックに入る**。
 - テスト用のシークレットは使わない（8章）。CI に新たな Secrets は追加しない。
 

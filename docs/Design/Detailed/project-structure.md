@@ -488,9 +488,9 @@ Git 純正の pre-commit の一部として、LLM を呼ばないルールベー
   1. **gitleaks ジョブ**（先頭・独立）: 依存のインストールもビルドも不要なため最初に実行する。PR のコミット範囲を検査するため checkout は `fetch-depth: 0` とする。gitleaks はバイナリを直接実行する（`gitleaks-action` v2 は Organization のリポジトリでライセンスキーを要するため、将来の移管に備えて依存しない）。
   2. **検査ジョブ**（`needs: gitleaks`）: 依存インストール（`pnpm install --frozen-lockfile`）→ lint → 型チェック → テスト（Vitest）→ ビルド。gitleaks が検知した場合は実行されない。
   3. **コンテナビルドジョブ**（`needs: gitleaks`。検査ジョブと並列）: `Containerfile` からイメージをビルドし、定義が壊れていないことを確認する（6.4）。起動・動作確認までは行わない。ランナーの Podman を使う想定で、使えない場合は `docker build` で代替する（Containerfile は OCI 準拠のためどちらでもビルドできる）。
-  4. **E2E ジョブ**（`needs: gitleaks`。検査ジョブ・コンテナビルドジョブと並列）: Playwright で主要シナリオを実行する（`test.md` 7・10.1章）。デプロイのブロック要件にはしない。
+  4. **E2E ジョブ**（`needs: gitleaks`。検査ジョブ・コンテナビルドジョブと並列）: Playwright で主要シナリオを実行する（`test.md` 7・10.1章）。PR の必須チェックとし、`main` では再実行しない。
 - **main**: テスト → ビルド → マイグレーション適用 → `wrangler deploy`（6.2）。テストが失敗した場合はデプロイを中断する。`wrangler deploy` が失敗した場合は、マイグレーションを再適用せずデプロイのみを再試行する（ADR-0004）。
-- PR の必須チェック化（Branch protection）は GitHub の設定であり、`CONTRIBUTING.md`（実装着手直前）で手順化する。
+- PR の必須チェック化（Branch protection）は GitHub の設定であり、`CONTRIBUTING.md`（実装着手直前）で手順化する。必須にするのは検査ジョブ・E2E ジョブ（`test.md` 10.1）で、「マージ前にブランチを最新化」も有効にする（`main` で E2E を再実行しない前提のため）。
 
 ## 10. パッケージマネージャ・npm scripts
 

@@ -19,7 +19,7 @@ GainLog は実質的に単一ユーザー・低トラフィックの個人向け
 E2E テストに Playwright（`@playwright/test`）を採用する。
 
 - CI に組み込む（Public リポジトリのため追加コストなし）。
-- 対象シナリオ・実行タイミング・テストダブルの方針は `docs/Design/Detailed/test.md` 7章で確定した（PR ごとに CI で主要5シナリオを実行し、デプロイのブロック要件にはしない。認証は ADR-0019）。
+- 対象シナリオ・実行タイミング・テストダブルの方針は `docs/Design/Detailed/test.md` 7章で確定した（PR ごとに CI で主要5シナリオを実行し、PR の必須チェックとする（`main` マージ時は再実行しない）。認証は ADR-0019）。
 - Storybook は採用しない（`docs/Design/Detailed/frontend.md` 1章）。単独開発ではカタログ共有・デザインシステム化の価値を回収しにくく、コンポーネント単位の確認は Vitest ＋ React Testing Library に統合する。
 
 ## Consequences
