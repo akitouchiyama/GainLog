@@ -31,7 +31,7 @@
 
 ### 日時型
 
-- `created_at` / `updated_at` / `expires_at` / `last_accessed_at` は全て `TEXT` 型とし、ISO 8601形式（例：`2026-08-16T12:00:00.000Z`）の UTC 時刻文字列で格納する。
+- `created_at` / `updated_at` / `expires_at` は全て `TEXT` 型とし、ISO 8601形式（例：`2026-08-16T12:00:00.000Z`）の UTC 時刻文字列で格納する。
 - **`workout_date` との違いに注意**：`workout_records.workout_date` は要件定義書「日付・タイムゾーン」の定義に従い `YYYY-MM-DD` 形式（JST基準の暦日）の日付文字列であり、上記の日時（timestamp）カラムとは異なる意味・フォーマットを持つ。本書では「日時（timestamp）」と「日付（date）」を明確に書き分ける。
 - SQLite には専用の DATE/DATETIME 型が存在しないため、いずれも実体は `TEXT` 型カラムである（Drizzle 上は `text()` として定義する）。
 
@@ -70,7 +70,6 @@ erDiagram
         TEXT user_id FK
         TEXT created_at
         TEXT expires_at
-        TEXT last_accessed_at
     }
     allowlist {
         TEXT id PK
@@ -142,9 +141,8 @@ Googleアカウントに紐づく内部ユーザー情報。JITプロビジョ�
 |---|---|---|---|---|
 | `id` | TEXT | NOT NULL | PRIMARY KEY | セッショントークンのSHA-256ハッシュ値（16進数文字列）。生トークンはDBに保存しない |
 | `user_id` | TEXT | NOT NULL | FOREIGN KEY → `users.id` ON DELETE CASCADE | セッションの所有ユーザー |
-| `created_at` | TEXT | NOT NULL | – | セッション作成日時（絶対有効期限の起点） |
-| `expires_at` | TEXT | NOT NULL | – | 絶対有効期限（作成時に`created_at + 30日`で固定） |
-| `last_accessed_at` | TEXT | NOT NULL | – | 直近アクセス日時（無操作24時間タイムアウト判定に使用） |
+| `created_at` | TEXT | NOT NULL | – | セッション作成日時（有効期限の起点） |
+| `expires_at` | TEXT | NOT NULL | – | 有効期限（作成時に`created_at + 24時間`で固定し、以降更新しない） |
 
 - `id` はUUIDではなく、auth.md 6章の記載通りトークンのハッシュ値である点に注意（本書2章「ID戦略」の例外）。
 - `sessions` には `updated_at` カラムを持たないため、7章の自動更新トリガーの対象外とする。

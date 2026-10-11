@@ -125,7 +125,7 @@ src/api/
 ```
 
 - 命名は「役割.種別.ts」（例：`google-id-token-verifier.ts`、`add-exercise-block.usecase.ts`）とし、`repositories/` 配下はインターフェース名の kebab-case に揃える。
-- テストファイルは `project-structure.md` の暫定方針どおり対象の隣に `*.test.ts` として置く（最終確定は `test.md`）。
+- テストファイルは `project-structure.md` の暫定方針どおり対象の隣に `*.test.ts` として置く（`test.md` 9.1 で確定。テスト支援コードは `src/api/testing/`）。
 
 ### 2.4 依存方向ルールの具体化（Lint 対象パス）
 
@@ -140,6 +140,8 @@ src/api/
 | `src/api/interface/container.ts` | 例外なし（ここでのみ `infrastructure/**` の実装を import してよい） |
 
 これにより「ハンドラから直接 Drizzle を呼び出すことを禁止する」（`auth.md` 13章）は、「`infrastructure/**` 以外から `drizzle-orm*` を禁止」というルールとして機械的に強制される。
+
+テストコード（`*.test.ts`・`testing/**`）は、リポジトリ・統合テストが実装・Drizzle を直接使うため、上の層ルールを緩和する。`api ⇄ client` の禁止と `shared` の純粋性は維持し、本番コードから `testing/` を import することは禁止する（`test.md` 9.2）。
 
 ## 3. Hono アプリ構成
 
@@ -166,6 +168,7 @@ export type AppType = typeof app
 export default app
 ```
 
+- **テストのための関数化（`test.md` 5.5）**：API 統合テストで外部境界（`IdTokenVerifier`・`GoogleOAuthClient`）だけを差し替えるため、アプリの組み立てを `createApp({ idTokenVerifier, googleOAuthClient })` として関数化する。`export default` は本番の実装を渡した結果とし、`AppType` は `ReturnType<typeof createApp>` とする。上記のチェーン規約は `createApp` 内で守る。
 - **一次情報での確認結果（`project-structure.md` 未解決12 の一部を回収）**：Hono の RPC 型推論は、ルート定義・`.route()` による結合の**両方でメソッドチェーンが必須**である（チェーンを切って個別の変数に代入すると、その時点で型が失われる）。この制約を踏まえ、各 `*.routes.ts` ファイル内・`index.ts` の結合部分とも、`const` 代入を挟まず1文でチェーンする規約とする。
 - ルート数が増えて型推論（IDE・`tsc -b`）のコストが問題になった場合は、リソース単位で `AppType` を分割し、`client` 側で複数の `hc<T>` を使う方式に切り替える（`project-structure.md` 未解決12 に残る「型推論のコスト」「Workers 型の解決」は実装フェーズ最初のタスクで引き続き検証する）。
 
@@ -191,7 +194,7 @@ flowchart LR
 | 2 | `container` | `c.env.DB` から Drizzle クライアントを作り、リポジトリ実装・`Clock`・`IdGenerator` を組み立てて `c.var` に注入する（composition root、4.1）。**`sessionAuth` がリポジトリを使うため、認証より先に置く** |
 | 3 | `secFetchSite` | `auth.md` 9章の実装。対象は `/api/*` の `POST`/`PUT`/`PATCH`/`DELETE` かつ `GET /api/auth/login`・`GET /api/auth/callback` を除く。`Sec-Fetch-Site` が `same-origin`/`none` 以外なら403、ヘッダ欠落は許容 |
 | 4 | `jsonContentType` | 上記と同じ対象範囲で `Content-Type: application/json` を必須化（CSRF対策の一部、`auth.md` 9章） |
-| 5 | `sessionAuth` | `GET /api/auth/login`・`GET /api/auth/callback` を除く全 `/api/*` に適用。`__Host-session` Cookie を読み、ハッシュ化して `SessionRepository` で検証（無操作24h・絶対30日、`auth.md` 6章）。成功時は `c.var.user`（`userId`）を設定し、`last_accessed_at` を5分間隔で間引き更新（`c.executionCtx.waitUntil()` で非同期に行い、レスポンスを待たせない）。失敗時は 401 |
+| 5 | `sessionAuth` | `GET /api/auth/login`・`GET /api/auth/callback` を除く全 `/api/*` に適用。`__Host-session` Cookie を読み、ハッシュ化して `SessionRepository` で検証（`now > expires_at` で期限切れ。固定24時間、`auth.md` 6章）。成功時は `c.var.user`（`userId`）を設定する。期限切れ・不明なセッションは行を削除して 401 |
 
 `GET /api/auth/me` は「未認証でも 200（`{ authenticated: false }` 相当）を返す」仕様であれば `sessionAuth` の対象外にする必要があるが、openapi.yaml の `/auth/me` は 401 レスポンスの定義を持たないため、**`sessionAuth` の対象に含め、未認証時は他の JSON API と同じ 401 を返す**方針とする（フロントは 401 をログイン画面遷移として扱う既存方針と整合する）。
 
@@ -207,7 +210,7 @@ flowchart LR
 - Google の ID トークンの `iss` は `https://accounts.google.com`（discovery document 上の正式値）だが、Google 公式ドキュメントは検証時に `https://accounts.google.com` **または** `accounts.google.com` の両方を許容するよう案内している。したがって `issuer: ['https://accounts.google.com', 'accounts.google.com']` を渡す。
 - `aud` はクライアント ID と完全一致で検証する（`audience` オプション）。
 
-**JWKS の取得先**：Google の discovery document（`https://accounts.google.com/.well-known/openid-configuration`）を毎回取得せず、そこに記載された安定した `jwks_uri`（`https://www.googleapis.com/oauth2/v3/certs`）を `createRemoteJWKSet` に直接渡す。discovery document 自体の取得は不要とし、Worker 起動のたびの追加往復を避ける。`jwks_uri` が変更された場合はコードの更新が必要になる点を未解決事項に記載する。
+**JWKS の取得先**：Google の discovery document（`https://accounts.google.com/.well-known/openid-configuration`）を毎回取得せず、そこに記載された安定した `jwks_uri`（`https://www.googleapis.com/oauth2/v3/certs`）を `createRemoteJWKSet` に直接渡す。discovery document 自体の取得は不要とし、Worker 起動のたびの追加往復を避ける。`jwks_uri` が変更された場合はコードの更新が必要になる点を未解決事項に記載する。検証器（`GoogleIdTokenVerifier`）は JWKS の取得元をコンストラクタで受け取れる形にし、本番は `createRemoteJWKSet`、テストはローカル鍵の JWKS を渡す（`test.md` 5.4。本番の挙動は変わらない）。
 
 `IdTokenVerifier` ポート（`domain/ports/id-token-verifier.ts`）は「検証済みクレーム（`sub`・`email`・`email_verified`）を返す、または例外を投げる」という抽象のみを持ち、`jose`・JWKS の詳細は `infrastructure/auth/google-id-token-verifier.ts` に閉じ込める。
 
@@ -489,4 +492,4 @@ openapi.yaml（凍結済みスナップショット）に定義された全エ�
 4. **セッショントークンの生成方式の詳細**（`crypto.getRandomValues` のバイト長、Base64url エンコードの実装。7.3）。
 5. **Google の `jwks_uri` が将来変更された場合の追随方法**（discovery document を都度取得する方式へ切り替えるか、値をハードコードしたまま運用するか）。
 6. **OpenAPI 仕様の公開**：将来 API を外部公開する必要が生じた場合の認証設計（11章）。
-7. **`test.md` へ引き継ぐ事項**：ユースケース（`application/`）のテスト方針（ポートをテストダブルに差し替える）、リポジトリのローカル実 D1 テスト、`AddExerciseBlockUseCase` の競合（7.1）を回帰テストで再現するか、所有者チェック横断テストの対象一覧（6.2 の表をそのまま使う）。
+7. **`test.md` で確定済み（5.1・5.2・5.6・5.7）**：ユースケース（`application/`）のテスト方針（ポートをテストダブルに差し替える）、リポジトリのローカル実 D1 テスト、`AddExerciseBlockUseCase` の競合（7.1）を回帰テストで再現するか、所有者チェック横断テストの対象一覧（6.2 の表をそのまま使う）。

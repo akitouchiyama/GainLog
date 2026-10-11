@@ -82,7 +82,7 @@ sequenceDiagram
                 Hono-->>Browser: 302 /login?error=not_allowed
             else allowlist内
                 Hono->>D1: users を sub で検索、無ければJIT作成
-                Hono->>D1: sessions に新規セッション作成（user_id, hash(token), created_at, expires_at=+30d, last_accessed_at）
+                Hono->>D1: sessions に新規セッション作成（user_id, hash(token), created_at, expires_at=+24h）
                 Hono-->>Browser: 一時Cookie削除 ＋ Set-Cookie（session）＋ 302 /
             end
         end
@@ -114,7 +114,7 @@ sequenceDiagram
 
 ### allowlist からの削除時の運用手順
 
-- allowlist からメールアドレスを削除しても、既に発行済みのセッション（無操作 24 時間・絶対有効期限 30 日）は自動的には失効しない。緊急に特定アカウントのアクセスを遮断したい場合は、allowlist からの削除に加えて、該当 `user_id` に紐づく `sessions` テーブルの行も手動で削除する（`wrangler d1 execute` 等）。この 2 手順をセットで行うことを運用手順として明記する。
+- allowlist からメールアドレスを削除しても、既に発行済みのセッション（ログインから 24 時間の固定有効期限）は自動的には失効しない。緊急に特定アカウントのアクセスを遮断したい場合は、allowlist からの削除に加えて、該当 `user_id` に紐づく `sessions` テーブルの行も手動で削除する（`wrangler d1 execute` 等）。この 2 手順をセットで行うことを運用手順として明記する。
 
 ## 5. ユーザー（User）テーブルとの関係
 
@@ -135,15 +135,13 @@ sequenceDiagram
 |---|---|
 | `id` | セッショントークンのハッシュ値（SHA-256等）。Cookie自体には生トークンのみを持たせ、DBには生トークンを保存しない |
 | `user_id` | `users.id` への外部キー |
-| `created_at` | セッション作成日時（絶対有効期限の起点） |
-| `expires_at` | 絶対有効期限（作成時に `created_at + 30日` で固定し、以降更新しない） |
-| `last_accessed_at` | 直近アクセス日時（無操作タイムアウト24時間の判定に使用。認証済みリクエストのたびに更新） |
+| `created_at` | セッション作成日時（有効期限の起点） |
+| `expires_at` | 有効期限（作成時に `created_at + 24時間` で固定し、以降更新しない） |
 
 - **生トークンをハッシュ化して保存する理由**：D1 のバックアップ流出や SQL インジェクション等でテーブル内容が漏洩しても、Cookie（ブラウザ側）を盗まない限りなりすましができないようにするため。
-- **タイムアウトの実装方法**：
-  - 無操作24時間：リクエストごとに `now - last_accessed_at > 24h` を判定し、超過していれば401＋セッション削除。
-  - 絶対30日：`now > expires_at` を判定し、超過していれば401＋セッション削除。`expires_at` は作成時に固定し、`last_accessed_at` の更新に連動して延長しない（無操作していなくても30日で必ず再ログインが必要という仕様）。
-  - `last_accessed_at` の更新はリクエストごとに毎回D1へ書き込むとコスト・レイテンシが増えるため、一定間隔（例：5分に1回程度）に間引いて更新する。この間引きにより保存値は実際の最終アクセスより最大で間引き間隔ぶん（例：約5分）古くなりうるため、無操作24時間タイムアウトは最大で約5分早く発火しうる。この誤差（間引き間隔ぶんの前倒し）を許容仕様とする。
+- **有効期限の実装方法**：
+  - ログインから24時間の固定期限とし、リクエストごとに `now > expires_at` を判定して、超過していれば401＋セッション削除。`expires_at` は作成時に固定し、アクセスによって延長しない（使用中であっても24時間後には再ログインが必要という仕様）。
+  - 無操作タイムアウトは設けない。単一ユーザーで1日1回の再ログイン（Googleアカウントの選択のみ）で足りるため、判定と `last_accessed_at` の更新（D1への書き込み）を省いてシンプルにする（ADR-0005 の2026-10改訂）。
   - 期限切れセッション行の物理削除は、検出時の遅延削除（lazy deletion）で十分とし、Cron Triggerによる定期クリーンアップはPhase 2以降の検討事項とする。
 
 ### Cookie属性
@@ -155,7 +153,7 @@ sequenceDiagram
 | Secure | 有効 | HTTPS以外での送信を防ぐため（Cloudflare Workersは常時HTTPSのため実質デメリットなし） |
 | SameSite | `Lax` | 同一オリジン構成のためAPI呼び出しは常にsame-site。Laxはクロスサイトの単純POST（フォームベースCSRF）を防ぎつつ、通常利用に支障がない |
 | Path | `/` | API・SPAとも同一オリジン内の広い範囲で必要なため |
-| Max-Age | 30日相当 | 絶対有効期限と合わせる。ただし実際の失効判定は常にサーバー側（D1の`expires_at`）で行い、Cookieの有効期限はUX上のヒントに過ぎない |
+| Max-Age | 24時間相当 | 有効期限と合わせる。ただし実際の失効判定は常にサーバー側（D1の`expires_at`）で行い、Cookieの有効期限はUX上のヒントに過ぎない |
 
 ### OAuth一時Cookie（state・nonce保持用）
 
@@ -233,7 +231,7 @@ CSRFトークン（Synchronizer Token等）を導入しない理由：BFF構成�
 
 ### 意図的に採用しなかった対策とその理由
 
-- **Google refresh tokenの保持**：長期ログイン維持は自前セッション（D1）のみで行い、refresh tokenは保持しない。実装・運用がシンプルになる一方、Googleアカウント側の失効を即座に検知できないトレードオフがあるが、本アプリの規模では自前セッションの絶対有効期限（30日）で十分カバーできると判断した。
+- **Google refresh tokenの保持**：長期ログイン維持は自前セッション（D1）のみで行い、refresh tokenは保持しない。実装・運用がシンプルになる一方、Googleアカウント側の失効を即座に検知できないトレードオフがあるが、本アプリの規模では自前セッションの有効期限（24時間）で十分カバーできると判断した。
 - **CSRFトークン（Synchronizer Token）**：BFF構成・同一オリジンのため、SameSite＋Content-Type制約＋CORS非許可＋Sec-Fetch-Site検証の多層防御で十分と判断し、実装コストの高いCSRFトークン方式は採用しなかった。
 - **allowlistメールアドレスのpepper付きハッシュ化**：実質数名規模の個人アプリであり、DBダンプ漏洩時の実害（少数のメールアドレス漏洩）とハッシュ化・pepper管理の実装コストを比較し、Phase 1では平文保存＋パラメータ化クエリ徹底で十分と判断した。将来的に利用者数が増える場合は再検討する。
 
@@ -271,4 +269,4 @@ D1（SQLiteベース）にはPostgreSQLのようなDBエンジン側のRow Level
 - [x] ハンドラから直接Drizzleクエリを呼び出すことを禁止するLintルールの要否・具体的な実装方法（ESLint の `no-restricted-imports` を層ごとに設定。`infrastructure/**` 以外での `drizzle-orm*` 禁止。`docs/Design/Detailed/backend.md` 2.4）
 - [x] 所有者チェック対象リソース一覧（`docs/Design/Detailed/backend.md` 6.2 で網羅）
 - [x] 事前定義データ（`owner_user_id`がnull、8章の例外ケース）に対する分岐処理（404/403の使い分け。`docs/Design/Detailed/backend.md` 6.3）
-- [ ] 統合テストの配置・命名規約、およびCIでの実行必須化の要否（`test.md` で確定する）
+- [x] 統合テストの配置・命名規約、およびCIでの実行必須化の要否（`docs/Design/Detailed/test.md` 5.5・5.6・9.1・10.1 で確定。routes の隣に配置し、Vitest の全 projects は PR・main とも必須）
