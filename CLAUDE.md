@@ -46,10 +46,10 @@ GainLog は、日々の筋力トレーニング（種目・重量・回数・セ
 
 ## 開発の進め方
 
-- 実装は **t-wada 流の TDD**（テストファースト / Red-Green-Refactor / TODO リスト駆動 / 三角測量）で進める。詳細は `docs/Design/Detailed/test.md`。
+- 実装は **t-wada 流の TDD**（テストファースト / Red-Green-Refactor / TODO リスト駆動 / 三角測量）で進める。詳細は `docs/Design/Detailed/test.md`。適用範囲（振る舞いが変わらない軽微な修正は TDD 不要）は同 2.4。
 - ディレクトリ構成は単一パッケージ（`src/api` / `src/client` / `src/shared`）を前提とする。詳細（Worker エントリポイントの配置を含む）は `docs/Design/Detailed/project-structure.md`。
 - 詳細設計フェーズでは、設計書を1本ずつブランチを切って作成し PR を出す。
-- コミット・push 前の検査（pre-commit: gitleaks・禁止ファイルガード・lint・型・要件整合性・migration 再作成ガード、pre-push: LLM レビュー）の方針は `docs/Design/Detailed/project-structure.md` 9章で定めた。ツールの導入は実装フェーズ最初のタスクのため、**現時点では未導入**。
+- コミット・push 前の検査（pre-commit: gitleaks・禁止ファイルガード・lint・型・関連テスト・要件整合性・migration 再作成ガード、pre-push: LLM レビュー）の方針は `docs/Design/Detailed/project-structure.md` 9章で定めた。ツールの導入は実装フェーズ最初のタスクのため、**現時点では未導入**。
 - マイグレーションは `drizzle-kit generate` で生成する。drizzle-kit がテーブル再作成 SQL（`__new_` / `DROP TABLE`）を生成した場合、トリガー消失や CASCADE のリスクがあるため、`project-structure.md` 8.3 の規約に従う（検出は同 9.2）。
 
 ## Git

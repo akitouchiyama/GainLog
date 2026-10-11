@@ -21,7 +21,7 @@
 | テストの隣置き | テストファイルは対象の隣に `*.test.ts(x)` として置く（暫定。本書 9章で確定） | `project-structure.md` 2.1 |
 | Vitest の3プロジェクト | api（Workers 環境）／client（DOM 環境）／shared（Node 環境）。Worker 用プラグインを client・shared に読み込ませない | `project-structure.md` 6.3 |
 | ポートの差し替え | `domain/ports` の抽象を介して、ユースケースのテストでは具象を差し替える | ADR-0013、`backend.md` 2.1 |
-| D1 はモックしない | リポジトリ・統合テストはローカルの実 D1 を使う。migration 適用後はシード（事前定義種目18件）とトリガーが入っている | ADR-0011、`project-structure.md` 8.4 |
+| D1 はモックしない | リポジトリ・統合テストはローカルの実 D1（workerd 上のローカル実行。Podman は使わない）を使う。**本番（リモート）の D1 には一切接続しない**。migration 適用後はシード（事前定義種目18件）とトリガーが入っている | ADR-0011、`project-structure.md` 8.4 |
 | 表示部品は props のみに依存 | ローディング・空・エラー等の状態を props の差し替えだけで再現できる | `frontend.md` 2.2 |
 | 時刻の注入点 | api は `Clock` ポート、client は `lib/date.ts`、shared は「現在時刻を引数で受け取る純関数」 | `backend.md` 7.3、`frontend.md` 9章、`project-structure.md` 4.1 |
 | E2E は Playwright | CI に組み込む。対象・タイミングは本書で確定する | ADR-0017 |
@@ -93,6 +93,18 @@ flowchart LR
 ### 2.3 バグ修正時
 
 先に再現するテストを書いて Red にし、修正して Green にする（回帰テスト）。テストを足さずに修正だけをコミットしない。
+
+### 2.4 TDD の適用範囲
+
+判断の目安は「**振る舞い（入出力）が変わるか**」。変わるならテストが先（TDD）で、変わらないなら TDD は不要とする。
+
+| 区分 | 例 |
+|---|---|
+| TDD を適用する | 新機能／ロジックの変更（バリデーション・自己ベスト計算・認可・SQL・状態遷移）／バグ修正（2.3） |
+| TDD を適用しない | 文言・スタイル（見た目のみ）・設定値の修正／ドキュメント／依存の更新／振る舞いを変えないリファクタ（既存テストが緑のまま保たれればよい） |
+
+- 適用しない場合も、**既存テストが緑であること**は確認する（pre-commit の関連テストと CI が担う）。
+- 迷う場合（振る舞いが変わるか不明など）は、実装者（Claude を含む）が判断せず、開発者に確認する。
 
 ## 3. テストサイズとレイヤー別方針
 
@@ -346,7 +358,7 @@ Google ログインは実際には通せないため、**セッションを直�
 1. テストごとに、固有の `google_sub`・email のユーザーを `users` へ INSERT する。
 2. 生トークン（十分に長いランダム値）を生成し、**SHA-256 の16進数ハッシュ**（`db.md` 5.2）を `sessions.id` として INSERT する（`expires_at` は未来）。
 3. 生トークンを `__Host-session` Cookie として、Playwright の `context.addCookies`（`secure: true`・`path: '/'`・`domain` なし相当・`httpOnly: true`）で注入する。
-4. SQL の実行は、`wrangler d1 execute gainlog --local --command/--file` を呼ぶ補助関数（`e2e/support/db.ts`）で行う。**ローカル D1 の状態は Wrangler と Vite プラグインが `.wrangler/state` を共有する**（`project-structure.md` 6.1）ことに依拠する。
+4. SQL の実行は、`wrangler d1 execute gainlog --local --command/--file` を呼ぶ補助関数（`e2e/support/db.ts`）で行う。**`--local` は補助関数の中に固定で埋め込み、引数・環境変数で外せないようにする**（付け忘れで本番 D1 に書き込む事故を防ぐため）。**ローカル D1 の状態は Wrangler と Vite プラグインが `.wrangler/state` を共有する**（`project-structure.md` 6.1）ことに依拠する。
 
 - **本番コードにテスト専用のログイン経路・分岐・環境変数を一切追加しない**（誤って本番に紛れ込むリスクを持たないため。ADR-0019）。
 - OAuth フロー自体（state・nonce・ID トークン検証・allowlist）は E2E では検証せず、5.4・5.5 の API 統合テストで担保する（E2E に載せると Google 側の都合に依存するため）。
