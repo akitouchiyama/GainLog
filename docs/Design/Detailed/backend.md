@@ -183,8 +183,8 @@ export default app
 flowchart LR
     A["requestLogger"] --> B["container（composition root）"]
     B --> C["secFetchSite\n（状態変更APIのみ）"]
-    C --> D["jsonContentType\n（状態変更APIのみ）"]
-    D --> E["sessionAuth\n（auth のナビゲーション系を除く）"]
+    C --> D["jsonContentType\n（JSON ボディを受けるルートのみ）"]
+    D --> E["sessionAuth\n（auth のナビゲーション系・logout を除く）"]
     E --> F["ルートハンドラ"]
 ```
 
@@ -193,8 +193,8 @@ flowchart LR
 | 1 | `requestLogger` | リクエストの `path`・`method` を後続の構造化ログ（10章）に使えるよう `c.var` に保持する |
 | 2 | `container` | `c.env.DB` から Drizzle クライアントを作り、リポジトリ実装・`Clock`・`IdGenerator` を組み立てて `c.var` に注入する（composition root、4.1）。**`sessionAuth` がリポジトリを使うため、認証より先に置く** |
 | 3 | `secFetchSite` | `auth.md` 9章の実装。対象は `/api/*` の `POST`/`PUT`/`PATCH`/`DELETE` かつ `GET /api/auth/login`・`GET /api/auth/callback` を除く。`Sec-Fetch-Site` が `same-origin`/`none` 以外なら403、ヘッダ欠落は許容 |
-| 4 | `jsonContentType` | 上記と同じ対象範囲で `Content-Type: application/json` を必須化（CSRF対策の一部、`auth.md` 9章） |
-| 5 | `sessionAuth` | `GET /api/auth/login`・`GET /api/auth/callback` を除く全 `/api/*` に適用。`__Host-session` Cookie を読み、ハッシュ化して `SessionRepository` で検証（`now > expires_at` で期限切れ。固定24時間、`auth.md` 6章）。成功時は `c.var.user`（`userId`）を設定する。期限切れ・不明なセッションは行を削除して 401 |
+| 4 | `jsonContentType` | **JSON ボディを受けるルート**（`POST`/`PUT`/`PATCH`）に限り `Content-Type: application/json` を必須化（CSRF対策の一部、`auth.md` 9章）。**ボディを持たない `POST /api/auth/logout` と `DELETE` 系は対象外**（ボディなしの `fetch` は `Content-Type` を送らず、必須化すると正常なリクエストが弾かれるため）。対象外でも CSRF は成立しない：HTML フォームは `DELETE` を送れず、クロスオリジンの `DELETE` はプリフライトで拒否され（CORS 非許可）、クロスサイトの `POST /logout` は `SameSite=Lax` で Cookie が送られない。いずれも `secFetchSite` の検証は適用する |
+| 5 | `sessionAuth` | `GET /api/auth/login`・`GET /api/auth/callback`・`POST /api/auth/logout` を除く全 `/api/*` に適用（logout は未認証・期限切れでも 204 を返す冪等な仕様のため、401 を返すこのミドルウェアの対象外とし、ハンドラが Cookie を直接読んで削除する。5.2）。`__Host-session` Cookie を読み、ハッシュ化して `SessionRepository` で検証（`now > expires_at` で期限切れ。固定24時間、`auth.md` 6章）。成功時は `c.var.user`（`userId`）を設定する。期限切れ・不明なセッションは行を削除して 401 |
 
 `GET /api/auth/me` は「未認証でも 200（`{ authenticated: false }` 相当）を返す」仕様であれば `sessionAuth` の対象外にする必要があるが、openapi.yaml の `/auth/me` は 401 レスポンスの定義を持たないため、**`sessionAuth` の対象に含め、未認証時は他の JSON API と同じ 401 を返す**方針とする（フロントは 401 をログイン画面遷移として扱う既存方針と整合する）。
 
@@ -220,7 +220,7 @@ flowchart LR
 |---|---|
 | `GET /api/auth/login` | state・nonce を生成し `__Host-oauth_txn` に格納。Google の認可 URL へ 302（`redirect_uri` は 5.3 参照） |
 | `GET /api/auth/callback` | `__Host-oauth_txn` の state と `?state=` を照合（不一致・Cookie 欠落は `/login?error=invalid_request`）→ 一時 Cookie 失効 → token endpoint 呼び出し → `IdTokenVerifier` で検証（失敗は `/login?error=invalid_token`）→ `CompleteLoginUseCase` 実行（allowlist 外は `/login?error=not_allowed`）→ セッション Cookie 発行 ＋ 302 `/` |
-| `POST /api/auth/logout` | `SessionRepository.delete(hash(token))`。存在しなくても 204（冪等、`auth.md` 7章） |
+| `POST /api/auth/logout` | `sessionAuth` の対象外（4.2）。ハンドラが `__Host-session` Cookie を直接読み、あれば `SessionRepository.delete(hash(token))`。Cookie がない・セッションが存在しない・期限切れのいずれでも 204 ＋ Cookie 失効の `Set-Cookie`（冪等、`auth.md` 7章） |
 | `GET /api/auth/me` | `sessionAuth` を通過済みの `c.var.user` からユーザー情報を返す |
 
 ### 5.3 redirect URI の導出

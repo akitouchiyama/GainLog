@@ -185,7 +185,7 @@ sequenceDiagram
 追加のCSRFトークンは導入せず、以下の組み合わせによる多層防御で対策する。
 
 1. セッションCookieの`SameSite=Lax`により、クロスサイトの単純フォームPOST等ではCookieが送信されない。
-2. 状態変更API（POST/PUT/DELETE）は`Content-Type: application/json`を必須とし、HTMLの`<form>`タグでは`application/json`を送信できない（送信可能なContent-TypeはHTML仕様上限定されている）ため、クロスサイトの単純フォーム攻撃が成立しない。
+2. JSONボディを受ける状態変更API（POST/PUT/PATCH）は`Content-Type: application/json`を必須とし、HTMLの`<form>`タグでは`application/json`を送信できない（送信可能なContent-TypeはHTML仕様上限定されている）ため、クロスサイトの単純フォーム攻撃が成立しない。ボディを持たない`POST /api/auth/logout`と`DELETE`系は対象外とする（HTMLフォームは`DELETE`を送れず、クロスオリジンの`DELETE`はプリフライトで拒否され、クロスサイトの`POST /logout`は1.によりCookieが送られないため）。
 3. 同一オリジン構成のためCORSを許可しておらず（`Access-Control-Allow-Origin`を設定しない）、他オリジンの`fetch`/`XHR`からのクロスオリジンリクエストはブラウザのCORSポリシーによりレスポンスを読めない。書き込み系はプリフライトが発生し、サーバー側がプリフライトを許可しなければリクエスト自体が成立しない。
 
 4. 状態変更API（`/api/*`のPOST/PUT/DELETE）に対し、`Sec-Fetch-Site`リクエストヘッダを検証し、値が`same-origin`および`none`（ユーザーのブックマーク・アドレスバー直接入力等）以外（`same-site`/`cross-site`）の場合は`403`を返す。ヘッダ自体が存在しない場合は、古いブラウザとの互換のため拒否しない（上記1〜3で担保する）。

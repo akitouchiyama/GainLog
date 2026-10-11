@@ -257,9 +257,9 @@ flowchart LR
 
 | 領域 | 観点 |
 |---|---|
-| 認証フロー（`auth.routes.test.ts`） | ①`/login`：`__Host-oauth_txn` を発行（HttpOnly・Secure・SameSite=Lax・Path=/・Domain なし）し、Google の認可 URL へ 302（`state`・`nonce`・`redirect_uri` を含む）②redirect URI は origin の許可リスト外なら `invalid_request`（`backend.md` 5.3）③`/callback`：`state` 不一致・Cookie 欠落 → `/login?error=invalid_request`／ID トークン不正 → `invalid_token`／allowlist 外 → `not_allowed`／成功 → セッション Cookie 発行＋302 `/`。一時 Cookie が失効される ④成功時、DB に保存されるのは**生トークンではなくハッシュ**（SHA-256 の16進数）⑤`/logout`：204、**存在しないセッションでも 204（冪等）**、以後同じ Cookie で 401 ⑥`/me`：認証済みで 200、未認証で 401 |
+| 認証フロー（`auth.routes.test.ts`） | ①`/login`：`__Host-oauth_txn` を発行（HttpOnly・Secure・SameSite=Lax・Path=/・Domain なし）し、Google の認可 URL へ 302（`state`・`nonce`・`redirect_uri` を含む）②redirect URI は origin の許可リスト外なら `invalid_request`（`backend.md` 5.3）③`/callback`：`state` 不一致・Cookie 欠落 → `/login?error=invalid_request`／ID トークン不正 → `invalid_token`／allowlist 外 → `not_allowed`／成功 → セッション Cookie 発行＋302 `/`。一時 Cookie が失効される ④成功時、DB に保存されるのは**生トークンではなくハッシュ**（SHA-256 の16進数）⑤`/logout`：204、**Cookie なし・存在しない・期限切れのセッションでも 204（冪等。`sessionAuth` の対象外。`backend.md` 4.2・5.2）**、以後同じ Cookie で 401 ⑥`/me`：認証済みで 200、未認証で 401 |
 | セッション（`session-auth.test.ts`） | `expires_at` 以前 → 通過／`expires_at` 超過（作成から24時間超）→ 401＋行の削除／存在しないセッション → 401（過去の `expires_at` を持つ行を直接 INSERT して検証する。227行目の方針） |
-| CSRF（`sec-fetch-site.test.ts`・`json-content-type.test.ts`） | 状態変更 API で `Sec-Fetch-Site: cross-site` → 403、`same-origin`・`none`・ヘッダ欠落 → 通過。`Content-Type` が JSON でない → 拒否。`GET /api/auth/login`・`/callback` は対象外（`backend.md` 4章） |
+| CSRF（`sec-fetch-site.test.ts`・`json-content-type.test.ts`） | 状態変更 API で `Sec-Fetch-Site: cross-site` → 403、`same-origin`・`none`・ヘッダ欠落 → 通過。JSON ボディを受けるルートで `Content-Type` が JSON でない → 拒否。ボディなしの `POST /api/auth/logout`・`DELETE` 系は `Content-Type` なしでも通過。`GET /api/auth/login`・`/callback` は対象外（`backend.md` 4章） |
 | 種目（`exercises.routes.test.ts`） | 一覧に事前定義＋自分の種目のみ／名前重複 → 409／事前定義の編集・削除 → 403／使用中の削除 → 409／他人の種目 → 404／`best-set`（5.2.1 の結果が API 経由で返る。`excludeDate` に該当記録がなければ除外なし） |
 | 記録（`records.routes.test.ts`） | 記録のない日の `GET /records/{date}` は **200 で `exercises: []`**／`POST /records/{date}/exercises` の同日同種目重複 → 409、見えない種目 → 404／3粒度の削除（日・種目・セット）と、**セット0件化による記録の自動削除**（カレンダーに空の記録日が出ない：`GET /records` に含まれない）／`set_number` の重複 → 409／`PATCH` で `set_number` を重複値に変更 → 409／`from > to` → 400 |
 
@@ -269,13 +269,14 @@ flowchart LR
 
 | 対象（`backend.md` 6.2） | 期待 |
 |---|---|
-| `WorkoutRecord`（日単位の取得・削除） | 404（記録が存在しない日と区別がつかない応答。取得は 200＋空配列の仕様に注意し、削除は 404） |
+| `WorkoutRecord` の日単位**削除** | 404 |
+| `WorkoutRecord` の日単位**取得**（`GET /records/{date}`） | 他ユーザーの記録がある日でも、記録が存在しない日と同じ **200＋`exercises: []`**（404 にしない。存在を漏らさない。`backend.md` 8.8） |
 | `WorkoutSet`・種目ブロック（追加・編集・削除） | 404 |
 | ユーザー追加 `Exercise`（`PATCH`・`DELETE`・`best-set`） | 404 |
 | 事前定義 `Exercise`（`PATCH`・`DELETE`） | **403**（全ユーザーに可視のため。404 ではない） |
 
 - **網羅性の自動検査**：アプリのルート一覧（`app.routes`）から全エンドポイントを列挙し、「所有者チェック対象表」または「対象外（認証・一覧等）の明示リスト」のどちらかに必ず含まれていることを検査するテストを置く。**エンドポイントを追加したのに横断テストへ追加し忘れると、このテストが失敗する**（`auth.md` 13章「実装ミスを検知する最終防御線」の実効性を保つため。`OpenAPIHono` から `app.routes` を列挙できるかは実装時に確認する。15章 未解決3）。
-- 併せて、**未認証での全 `/api/*`（`/auth/login`・`/auth/callback` を除く）が 401** になることも同じ列挙で確認する。
+- 併せて、**未認証での全 `/api/*`（`/auth/login`・`/auth/callback`・`/auth/logout` を除く。logout は未認証でも 204 の冪等な仕様。5.4）が 401** になることも同じ列挙で確認する。
 - ユーザー A・B はビルダーで作り（9.3）、B のリクエストが**A のデータを一切変更していない**ことも、A のデータを再取得して確認する（404 を返しつつ書き込みが走っていた、という実装ミスを検出するため）。
 
 ### 5.7 競合の扱い
@@ -478,7 +479,7 @@ Google ログインは実際には通せないため、**セッションを直�
 | 1 | Google アカウントでログインできる | 5.5 認証フロー（`/login` → `/callback` 成功 → セッション Cookie ＋ 302）／7章（セッション投入後の認証済み導線） | 12.3（本番で実際の Google ログイン） |
 | 2 | allowlist 外の Google アカウントでのログインは拒否される | 5.1（`CompleteLoginUseCase`）・5.5（`/callback` → `not_allowed`）・5.2（大文字小文字を区別しない照合）・5.3（`allowlist.email` の UNIQUE） | – |
 | 3 | state・nonce・ID トークン（署名・issuer・audience・有効期限）がサーバー側で検証され、不正は拒否される | 5.4（ID トークン検証の全観点）・5.5（`state` 不一致・Cookie 欠落 → `invalid_request`、トークン不正 → `invalid_token`） | – |
-| 4 | 未認証のアクセス、および他ユーザーのリソースへの操作は全 API で拒否される | 5.6（未認証の全 `/api/*` が 401、他ユーザーのリソースが 404／403、ルート一覧の網羅検査）・5.2（所有者による絞り込み）／7.3 シナリオ1（未認証リダイレクト） | – |
+| 4 | 未認証のアクセス、および他ユーザーのリソースへの操作は全 API で拒否される | 5.6（未認証の全 `/api/*`（login・callback・logout を除く）が 401、他ユーザーのリソースが 404／403、ルート一覧の網羅検査）・5.2（所有者による絞り込み）／7.3 シナリオ1（未認証リダイレクト） | – |
 | 5 | ログインから24時間が経過すると、セッションが無効化され再ログインが必要になる | 5.5 セッション（固定24時間の期限）／6.3（401 → `/login`） | – |
 | 6 | ログアウトによりセッションが破棄され、再ログインが必要になる | 5.5（`/logout` の204・冪等・以後の401）／6.3（ログアウト後の `clear()` と遷移）／7.3 シナリオ5 | – |
 | 7 | ある日の筋トレ記録を作成・保存できる | 5.5（記録・種目ブロック・セットの作成）・5.2（`batch` の原子性）／6.3（ミューテーションと invalidate）／7.3 シナリオ2 | – |
