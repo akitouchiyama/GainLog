@@ -13,7 +13,7 @@
 
 | ゲート | 内容 | 性質 |
 |---|---|---|
-| pre-commit（Lefthook） | gitleaks、禁止ファイルガード、lint・format・型、要件整合性チェック、migration 再作成ガード | 決定論的・ブロッキング・LLM なし |
+| pre-commit（Lefthook） | gitleaks、禁止ファイルガード、lint・format・型、関連テスト（`vitest related`。E2E は対象外）、要件整合性チェック、migration 再作成ガード | 決定論的・ブロッキング・LLM なし |
 | pre-push | `claude -p` による規約・セキュリティレビュー | **Blocker 指摘のみ push をブロック**。`--no-verify` で回避可。ドキュメントのみの push は対象外。`claude` 不在・失敗時は警告して通す（フェイルオープン） |
 | CI（PR） | gitleaks（先頭の独立ジョブ）→ 通過後に lint・型・テスト・ビルド。E2E（Playwright）は別ジョブとして並列に実行 | ブロッキング。シークレットを検知したら後続を実行しない。E2E も PR の必須チェックとし、通らなければマージ（＝デプロイ）できない。`main` では再実行しない（`test.md` 10.1） |
 | CI/CD（main） | テスト → ビルド → マイグレーション → デプロイ | ADR-0003・0004 |

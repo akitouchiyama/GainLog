@@ -87,7 +87,7 @@ flowchart LR
 
 - **コミットは Green 単位（「テスト＋それを通す実装」）と Refactor 単位**とする。**Red の状態（失敗するテスト）はコミットしない**。CI が落ちるためと、Conventional Commits の 1 コミット 1 目的（`CLAUDE.md`）を保つため。
 - `it.todo` の追加のみのコミットは許容する（`todo` は失敗にならない）。
-- pre-commit（`project-structure.md` 9.2）は lint・format・型・シークレット等であり、**テストは実行しない**。テストの実行は手元（`pnpm test`）と CI の責務とする。したがって Red を誤ってコミットしても pre-commit は止めないため、コミット前に `pnpm test` が緑であることを開発者が確認する。
+- pre-commit（`project-structure.md` 9.2）は lint・format・型・シークレット等に加え、**変更ファイルに関連するテスト（`vitest related --run`）を実行する**。Red の状態を誤ってコミットしようとすると pre-commit が止める。E2E・全件テストは対象外で、CI の責務とする。関連テストはファイル間の import をたどって選ばれるため、依存をたどれない変更（設定ファイル・migration 等）では拾い漏れがありうる。念のためコミット前の `pnpm test` も推奨する。
 - コミットメッセージは `feat:`／`fix:`／`refactor:`／`test:` を内容に応じて使い分ける。テストのみの追加（既存実装の仕様固定・回帰テスト）は `test:`。
 
 ### 2.3 バグ修正時
@@ -162,6 +162,7 @@ flowchart LR
 | `test` | `vitest run`（全 projects。CI と同じ） |
 | `test:watch` | `vitest`（TDD の開発中に使う。対象プロジェクトの絞り込みは Vitest の `--project` を使う） |
 | `test:coverage` | `vitest run --coverage`（10.3） |
+| `test:related` | `vitest related --run`（pre-commit が staged のファイルを渡して呼ぶ。`project-structure.md` 9.2） |
 | `e2e` | `playwright test`（7章。`frontend.md` 12.3 の行の具体化） |
 
 ## 5. バックエンドのテスト
@@ -434,7 +435,7 @@ Google ログインは実際には通せないため、**セッションを直�
 
 | タイミング | ジョブ | テスト |
 |---|---|---|
-| ローカル pre-commit | – | **実行しない**（lint・型・シークレット等のみ。`project-structure.md` 9.2） |
+| ローカル pre-commit | – | **関連テストのみ**（`vitest related --run`。E2E は対象外。`project-structure.md` 9.2） |
 | PR | gitleaks（先頭・独立） | – |
 | PR | 検査ジョブ（`needs: gitleaks`） | lint → 型チェック → **Vitest（全 projects：shared・api・client）** → ビルド |
 | PR | E2E ジョブ（`needs: gitleaks`。検査ジョブ・コンテナビルドジョブと並列） | **Playwright（7章。desktop・mobile）**。ブラウザは Chromium のみインストールする |
@@ -558,3 +559,4 @@ Google ログインは実際には通せないため、**セッションを直�
 10. **E2E の CI**：Playwright のブラウザのキャッシュ、所要時間、`retries`・`workers` の初期値の妥当性（7.1・7.4）。実測して見直す。
 11. **テーブル再作成時の親行・子行の実挙動**（`project-structure.md` 13章 未解決2 の持ち越し）：再作成を含む migration を書く段階で、5.3 の層に回帰テストを追加する。
 12. **手動確認手順の具体化**（12章）：URL・計測コマンド・記録の置き場所を、初回デプロイの前に確定する。
+13. **pre-commit の関連テスト**（2.2、`project-structure.md` 9.2）：`vitest related` が workerd 上の `api` プロジェクトでも期待どおり動くか、所要時間が TDD の小さなコミットを妨げないかを実測する。遅い・拾い漏れが多い場合は、対象を `shared`・`client` に絞る、または pre-commit から外して CI のみにする。

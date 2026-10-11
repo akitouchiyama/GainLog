@@ -438,7 +438,7 @@ PRAGMA foreign_keys=ON;
 
 | ゲート | タイミング | 実行主体 | 性質 | 役割 |
 |---|---|---|---|---|
-| pre-commit | `git commit` | Lefthook | 決定論的・ブロッキング・LLM なし | 機密・禁止ファイルの混入防止、lint・format・型、要件整合性、migration 再作成ガード |
+| pre-commit | `git commit` | Lefthook | 決定論的・ブロッキング・LLM なし | 機密・禁止ファイルの混入防止、lint・format・型、関連テスト、要件整合性、migration 再作成ガード |
 | pre-push | `git push` | Lefthook ＋ `claude -p` | LLM レビュー・**Blocker 指摘のみブロック** | コーディング規約・セキュリティのレビュー |
 | CI（PR） | PR 作成・更新 | GitHub Actions | 決定論的・ブロッキング | gitleaks を先頭で実行し、通過後に lint・型・テスト・ビルド |
 | CI/CD（main） | `main` へのマージ | GitHub Actions | 決定論的 | テスト → ビルド → マイグレーション → デプロイ（6.2） |
@@ -452,6 +452,7 @@ PRAGMA foreign_keys=ON;
 | シークレット検出 | gitleaks で staged の差分を検査 |
 | 禁止ファイルガード | `.env*`、`.dev.vars`、`*.pem`、`.wrangler/`（`state` を含むローカル D1）、大容量ファイルの追加を拒否。`.gitignore` との二重防御 |
 | lint・format・型 | ESLint、Prettier（`--check`）、`tsc -b`。staged のファイルを対象にする |
+| 関連テスト | `vitest related --run <staged のソース/テストファイル>`（`test.md` 4.4・2.2）。変更ファイルから依存をたどった関連テストだけを実行し、Red（失敗するテスト）の誤コミットを止める。E2E は対象外。全件は CI の責務で、依存をたどれない変更（設定ファイル・migration 等）の拾い漏れは CI が最終防御線となる。実行時間・拾い漏れは実測して見直す（`test.md` 15章 未解決13） |
 | migration 再作成ガード | `migrations/*.sql` の差分に `__new_` または `DROP TABLE` を含む場合、SQL 先頭に `-- reviewed-rebuild: <理由>` のコメントがなければ失敗させる（8.3） |
 | 要件整合性チェック | 9.4 |
 
