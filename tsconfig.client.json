@@ -15,5 +15,5 @@
     "paths": { "@shared/*": ["./src/shared/*"] }
   },
   "include": ["src/client/**/*"],
-  "references": [{ "path": "./tsconfig.shared.json" }]
+  "references": [{ "path": "./tsconfig.shared.json" }, { "path": "./tsconfig.api.json" }]
 }
