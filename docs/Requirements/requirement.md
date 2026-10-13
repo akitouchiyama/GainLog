@@ -115,7 +115,7 @@ GainLog は、日々の筋力トレーニング（種目・重量・回数・セ
 ### 技術スタック
 - **Backend**: TypeScript, Hono, Zod, `@hono/zod-openapi`, OpenAPI, Vitest, Drizzle ORM（drizzle-kit）, `jose`（Google ID トークン検証。`docs/Design/Detailed/backend.md` 5.1 章、ADR-0014）
 - **Frontend**: TypeScript, React, Vite, TailwindCSS（`@tailwindcss/vite`）, Zod, Vitest, React Router, TanStack Query（`docs/Design/Detailed/frontend.md` 1章、ADR-0015）, `@playwright/test`（E2E。`docs/Design/Detailed/frontend.md` 1章、ADR-0017）
-- **テスト**: Vitest 5, `@cloudflare/vitest-plugin`（API を workerd・ローカル D1 上でテスト）, jsdom, React Testing Library（`@testing-library/react`・`@testing-library/dom`・`@testing-library/user-event`・`@testing-library/jest-dom`）, MSW（`msw`。クライアントの API 差し替え）, カバレッジ（`@vitest/coverage-v8` または `@vitest/coverage-istanbul`。プロバイダは実装時に確定）（`docs/Design/Detailed/test.md` 1・4章、ADR-0018）。E2E の `@playwright/test` は Frontend に記載
+- **テスト**: Vitest 5, `@cloudflare/vitest-plugin`（API を workerd・ローカル D1 上でテスト）, jsdom, React Testing Library（`@testing-library/react`・`@testing-library/dom`・`@testing-library/user-event`・`@testing-library/jest-dom`）, MSW（`msw`。クライアントの API 差し替え）, カバレッジ（`@vitest/coverage-v8`。`docs/Design/Detailed/test.md` 10.3）（`docs/Design/Detailed/test.md` 1・4章、ADR-0018）。E2E の `@playwright/test` は Frontend に記載
 - **DB**: Cloudflare D1（SQLite 互換）
 - **ビルド・開発・品質管理**: Vite（`@cloudflare/vite-plugin`）, Wrangler, pnpm, ESLint, Prettier, Lefthook, gitleaks
 - **コンテナ（ビルド成果物の確認用）**: Podman, podman-compose（Containerfile / Compose Spec）。開発自体はコンテナを使わない（ADR-0012）
