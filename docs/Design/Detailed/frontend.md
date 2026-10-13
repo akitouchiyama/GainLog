@@ -531,8 +531,8 @@ Playwright はビルド済みの SPA（`vite build` の出力、または `vite 
   ```
 
 - 一次情報で確認：`_headers` による設定は**静的アセットのレスポンスにのみ適用され、Worker が生成したレスポンスには適用されない**（Cloudflare 公式ドキュメントで明記）。本アプリの `/api/*` は `run_worker_first` により常に Hono（Worker）が処理する JSON API であり、CSP はブラウザでの HTML/JS 実行を制御するヘッダのため JSON API には元々不要である。一方 SPA の `index.html`（`not_found_handling: single-page-application` によるフォールバックを含む）は Static Assets が直接応答する経路（`architecture.md` 3章）であるため、`_headers` の対象に含まれる。
-- **未確認**：`_headers` の `/*` パターンが、実ファイルに一致しないパスへの SPA フォールバック応答（`index.html` への振り替え）にも適用されるか（Cloudflare のドキュメントはこの組み合わせを明示していない）。実装フェーズ最初のタスクで実機確認し、適用されない場合は `not_found_handling` のフォールバック専用の記法を追加調査する（17章 未解決事項）。
-- Tailwind v4 ＋ `@tailwindcss/vite` はビルド時に単一の CSS ファイルへ出力する方式であり、インライン `style` 属性やインライン `<style>` タグの生成には依存しないため、`style-src 'unsafe-inline'` は付与しない方針とする（実装時に生成物を確認する）。
+- **確認済み（実装前の技術検証、2026-10-12）**：`_headers` の `/*` パターンは、`/`・実ファイルに一致しないパスへの SPA フォールバック応答（`/records/2026-10-12` 等）・アセット（CSS 等）のすべてに CSP を付与し、`/api/*` には付与しなかった。ただしローカルの `vite preview`（Miniflare）での確認であり、本番のエッジでの最終確認は初回デプロイ時に行う。
+- Tailwind v4 ＋ `@tailwindcss/vite` はビルド時に単一の CSS ファイルへ出力する方式であり、インライン `style` 属性やインライン `<style>` タグの生成には依存しないため、`style-src 'unsafe-inline'` は付与しない方針とする。技術検証（Tailwind 4.3.3）で、出力が CSS 1 ファイルでインラインの `style` 属性・`<style>` タグを含まないこと、上記の CSP の下で Chromium で表示しても CSP 違反が発生せず、スタイルが適用されることを確認した。
 - 開発サーバ（Vite dev）には CSP を適用しない（`_headers` はビルド成果物にのみ効くため、自然とこの方針になる）。
 
 ## 14. パフォーマンス（FCP・Lighthouse 目標への対応）
@@ -549,7 +549,7 @@ Playwright はビルド済みの SPA（`vite build` の出力、または `vite 
 - ドロワー・トースト・モーダルの具体的な幅・アニメーション・表示時間（`screens.md` 8章・`common-spec.md` 8章のとおり実装時に定める）
 - テストの配置・ダブル方針・コンポーネントテストの粒度・E2E（Playwright）の対象シナリオ・実行タイミング（`test.md`）
 - Google Cloud Console 側の設定（`auth.md` 12章のスコープ）
-- CSP の実機での最終確定（13.2 の未確認事項。実装フェーズ最初のタスク）
+- CSP の本番エッジでの最終確認（13.2。ローカルでは確認済み。初回デプロイ時）
 
 ## 16. 既存設計書との整合性チェック結果
 
@@ -574,9 +574,9 @@ Playwright はビルド済みの SPA（`vite build` の出力、または `vite 
 
 ## 17. 未解決事項
 
-1. **`hc` の型推論の利用方法**：各フックで成功時の型を `hc` の `InferResponseType` から取るか `shared` の型を明示するか（4.2）。実装フェーズ最初のタスクで決める。
-2. **`_headers` が SPA フォールバック応答（`not_found_handling: single-page-application`）にも適用されるか**（13.2）。実装フェーズ最初のタスクで実機確認する。
-3. **Tailwind v4 の生成物がインライン style を要するか**（13.2）。実装時に確認し、CSP の `style-src` を必要なら見直す。
+1. **`hc` の型推論の利用方法**：各フックで成功時の型を `hc` の `InferResponseType` から取るか `shared` の型を明示するか（4.2）。最初のフックを実装するときに決める（RPC の型推論自体が成立することは技術検証で確認済み）。
+2. ~~**`_headers` が SPA フォールバック応答にも適用されるか**~~ → **解決済み**（実装前の技術検証、2026-10-12）。適用される（13.2）。本番エッジでの最終確認は初回デプロイ時。
+3. ~~**Tailwind v4 の生成物がインライン style を要するか**~~ → **解決済み**（同上）。要さない。`style-src 'self'` のままでよい（13.2）。
 4. **Vitest（client・shared）から Cloudflare プラグインを除外する具体的な方法**（`test.md` 4.1 で確定済み。`project-structure.md` 未解決4）。
 5. **コード分割の要否**（14章）：実装後の Lighthouse 計測で判断する。
 6. **`ConfirmDialog`・`Drawer` の `<dialog>` の閉じ方の実装詳細**（`close` イベント判定か明示的な `close()` 呼び出しか。10.2）。

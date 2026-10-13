@@ -40,7 +40,7 @@
 ## Consequences
 
 - 本番と同じランタイム・同じ migration でテストされ、トリガー・CHECK・RESTRICT の挙動を実 D1 で検証できる。
-- 実装フェーズ最初のタスクで、Vitest 5 との組み合わせ・カバレッジ・ストレージ分離・jsdom の `<dialog>` を実測する（`test.md` 15章）。合わない場合は Vitest 4.1 系へ、カバレッジは計測対象の縮小へ切り替える。
+- 実装前の技術検証（2026-10-12）で実測した（`test.md` 15章）。Vitest 5.0.3 のまま動作し、カバレッジは v8・istanbul とも workerd 上のコードを計測できたため v8 に確定した。D1 のストレージはテストファイル単位で分離される。jsdom は `<dialog>` の `showModal()`・`close()` を実装していないため、setup の最小スタブと E2E で補う。msw 3 では未処理リクエストの設定が `onUnhandledFrame` に改名されている。
 - 追加依存（`@cloudflare/vitest-plugin`・`jsdom`・RTL 系・`msw`・`@vitest/coverage-*`）は `requirement.md` 6章に追記する。
 - wrangler・`@cloudflare/vite-plugin`・`@cloudflare/vitest-plugin` は依存が連動するため、単一の版に解決されることを確認する（`pnpm why wrangler`）。
 

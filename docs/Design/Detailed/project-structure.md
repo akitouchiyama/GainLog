@@ -28,23 +28,24 @@
 
 ### 導入するツール・ライブラリ（要件定義書 6章への追記対象）
 
-`requirement.md` 6章に明記のないものは、本書の確定に合わせて 6章へ追記する（CLAUDE.md の合意ルール）。バージョンは 2026-09-20 時点の npm `latest` を一次情報で確認したもので、実装時に再確認する。
+`requirement.md` 6章に明記のないものは、本書の確定に合わせて 6章へ追記する（CLAUDE.md の合意ルール）。バージョンは実装前の技術検証（2026-10-12、プロジェクト初期化時）に導入した版である。正確な版は `package.json` と `pnpm-lock.yaml` を正とする。
 
-| 区分 | ツール | 確認したバージョン・状態 | 備考 |
+| 区分 | ツール | 導入したバージョン・状態 | 備考 |
 |---|---|---|---|
-| ビルド | Vite | 8.x（Node `^20.19 \|\| >=22.12`） | |
-| Workers 統合 | `@cloudflare/vite-plugin` | 1.56.0（GA）。peer: vite ^6〜^8、wrangler ^4.135.0 | |
-| Workers CLI | Wrangler | 4.135.0（Node >=22） | |
+| ビルド | Vite | 8.3.4（Node `^20.19 \|\| >=22.12`） | |
+| Workers 統合 | `@cloudflare/vite-plugin` | 1.63.1。peer: vite ^6〜^8、wrangler ^4.149.0 | |
+| Workers CLI | Wrangler | 4.149.0（Node >=22） | `pnpm why wrangler` で単一の版に解決されることを確認（`@cloudflare/vitest-plugin` も 4.149.0 に依存） |
 | ルーティング定義 | `@hono/zod-openapi` | 1.6.3。peer: zod ^4、hono >=4.10 | |
-| バリデーション | Zod | 4.x | Valibot は採用しない（4章） |
-| ORM | Drizzle ORM / drizzle-kit | **0.45.2 / 0.31.10（安定版）** | 1.0 は rc のため採用しない |
-| Lint / Format | ESLint（flat config）＋ typescript-eslint、Prettier | – | |
-| Git フック | Lefthook | – | |
+| バリデーション | Zod | 4.6.5 | Valibot は採用しない（4章）。単一インスタンスを確認（4.2） |
+| ORM | Drizzle ORM / drizzle-kit | **0.45.4 / 0.31.11（安定版）** | 1.0 は rc のため採用しない |
+| 言語 | TypeScript | **6.0.3（固定）** | 7 系は周辺ツールとの相性が未確認のため採用しない |
+| Lint / Format | ESLint（flat config）＋ typescript-eslint、Prettier | – | 品質ゲートの導入時に版を確定する |
+| Git フック | Lefthook | – | 同上 |
 | シークレット検出 | gitleaks | – | pre-commit と CI |
-| パッケージマネージャ | pnpm | – | |
-| コンテナ | Podman ＋ podman-compose（Containerfile / Compose Spec） | 開発機で Podman 4.9.3・podman-compose を確認 | npm 依存ではない。ビルド成果物の確認用（6.4） |
+| パッケージマネージャ | pnpm | 12.11.2（`packageManager` で固定） | 依存のビルドスクリプトの許可が必要（10章） |
+| コンテナ | Podman ＋ podman-compose（Containerfile / Compose Spec） | 開発機で Podman 4.9.3・podman-compose 1.0.6 を確認 | npm 依存ではない。ビルド成果物の確認用（6.4） |
 
-ID token 検証ライブラリは `backend.md` 5.1 章で `jose` に確定済み（ADR-0014）。React Router・サーバー状態管理（TanStack Query）・Tailwind の版は `frontend.md` 1章で確定済み（ADR-0015）。テスト用ライブラリは `test.md` 1章で選定済み（`requirement.md` 6章へ追記済み。ADR-0018）。バージョンは 2026-10-10 時点で wrangler 4.149.0・`@cloudflare/vite-plugin` 1.63.1 に更新されており、`@cloudflare/vitest-plugin` が wrangler 4.149.0 に依存するため、実装時に上の表の版を再確認して揃える。
+ID token 検証ライブラリは `backend.md` 5.1 章で `jose` に確定済み（ADR-0014）。React Router・サーバー状態管理（TanStack Query）・Tailwind の版は `frontend.md` 1章で確定済み（ADR-0015）。テスト用ライブラリは `test.md` 1章で選定済み（`requirement.md` 6章へ追記済み。ADR-0018）。
 
 ## 2. ディレクトリ構成と責務
 
@@ -64,7 +65,7 @@ GainLog/
 ├── scripts/
 │   └── hooks/                # Git フックから呼ぶ決定論チェック（Node 標準のみ。9章）
 ├── docs/                     # 要件・設計書・ADR
-├── .github/workflows/        # CI/CD（9章。実体は実装フェーズ最初のタスク）
+├── .github/workflows/        # CI/CD（9章。実体は CI の構築時に作成）
 ├── public/
 │   └── _headers               # 静的アセット応答への CSP 付与（frontend.md 13.2章）
 ├── index.html                # Vite のクライアントエントリ（リポジトリ直下）
@@ -82,7 +83,7 @@ GainLog/
 ├── compose.yaml              # 同上の起動定義（Compose Spec。6.4）
 ├── .containerignore          # イメージに含めないもの（6.4）
 ├── .dev.vars.example         # ローカル用シークレットのキー一覧（値なし。7章）
-├── .nvmrc / package.json / pnpm-lock.yaml
+├── .nvmrc / package.json / pnpm-lock.yaml / pnpm-workspace.yaml（依存のビルドスクリプトの許可。10章）
 └── CLAUDE.md / README.md     # CONTRIBUTING.md は実装着手直前に追加（ADR-0003）
 ```
 
@@ -147,6 +148,12 @@ flowchart LR
    | `tsconfig.shared.json` | ES2022 のみ。`types` は空 | shared で DOM・Workers のグローバルを使うとコンパイルエラー |
 
    ルートの `tsconfig.json` は `references` のみを持ち、型チェックは `tsc -b` で実行する。
+
+   実装前の技術検証（2026-10-12）で次を確認・確定した。
+   - **`tsconfig.client.json` は `references` に `tsconfig.api.json` を含める。** client が `src/api/index.ts` の `AppType` を `import type` する（3.1 の例外）ため、参照しないと TS6307（プロジェクト外のファイル）で失敗する。参照すると、api の型は宣言ファイル経由で client に渡る。
+   - **client では `Cloudflare.Env` などの Workers 型は未解決のまま、`skipLibCheck: true` によって黙認される**（`skipLibCheck: false` にすると `Cannot find namespace 'Cloudflare'` になることを確認）。RPC が使うパス・入力・レスポンスの型には影響しない（存在しないフィールドや不正な値が型エラーになることを確認）。client に Workers 型を持ち込まずに分離を保つため、この状態を受け入れる。
+   - **`tsconfig.api.json` の `types` には、テスト用の型 `@cloudflare/vitest-plugin/types`（`cloudflare:test`）も含める**（`test.md` 15章 7 の回答）。tsconfig は分割しない。その代わり、本番コードからの `cloudflare:test` の import は ESLint で禁止する（品質ゲートの導入時に設定する）。
+   - `vite.config.ts`・`vitest.config.ts`・`drizzle.config.ts` などの設定ファイルは、上の 3 つのどの tsconfig にも含まれず、型チェックの対象外である。扱いは品質ゲートの導入時に決める（13章 未解決）。
 2. **ESLint の `no-restricted-imports` をディレクトリ別に設定する**（import 方向の禁止）
 
    | 対象ファイル | 禁止する import |
@@ -159,7 +166,7 @@ flowchart LR
 
    client の例外（3.1）は、`@typescript-eslint/no-restricted-imports` の `allowTypeImports` を `src/api/index.ts` のパスに限って有効にして実現する。値としての import（`import { app }` 等）は引き続き禁止される。
    表の最後の行が `auth.md` 13章の「ハンドラから直接 Drizzle を呼ぶことを禁止する Lint」に相当する（`backend.md` 2.4 で「`infrastructure/**` 以外での `drizzle-orm*` 禁止」として具体化）。**現時点では専用のカスタム ESLint ルールは作らず、`no-restricted-imports` で足りる**という方針とする。実装中に静的に検出したい規約が出てきた場合は、flat config にローカルルール（リポジトリ内のプラグイン）として追加してよい。追加の依存は不要だが、外部の `eslint-plugin-*` を導入する場合は `requirement.md` 6章への追記と 9.4 の許可リストの更新が必要になる。ただし「WHERE 句の中身が正しいか」は静的解析では保証できず、最終防御線は統合テスト（`test.md` 5.5・5.6）である（`auth.md` 13章の留意と同じ）。なお、テストコード（`*.test.ts(x)`・`testing/**`）には api 内部の層ルールのみ緩和を適用し、`api ⇄ client` の禁止と `shared` の純粋性は維持する。本番コードから `**/testing/**` の import は禁止する（`test.md` 9.2）。
-   ルールが実際に違反を検出することは、実装フェーズ最初のタスクで、違反コードを一時的に書いて確認する。
+   ルールが実際に違反を検出することは、品質ゲートの導入時に、違反コードを一時的に書いて確認する。
 
 ### 3.3 パスエイリアス
 
@@ -189,9 +196,9 @@ flowchart LR
 - `requirement.md` 6章・`openapi.yaml`・ADR-0007 で食い違っていたバリデーションライブラリ（Zod / Valibot）を **Zod に統一**する。API と UI の制約・文言を同一に保つ（`common-spec.md` 3章、`requirement.md` 5.1）ために、スキーマの定義元を shared の1か所にする。
 - **shared のスキーマは素の `zod` で書く**（メタデータが必要な場合は Zod 4 の `.meta()`）。`@hono/zod-openapi` を shared から import しない。
   - 根拠（一次情報で確認できた範囲）: `@asteasolutions/zod-to-openapi` は v8 以降（Zod 4）で `.meta()` によるメタデータ指定に対応し、`.openapi()` の拡張（`extendZodWithOpenApi`）は Zod オブジェクト全体を拡張する。`@hono/zod-openapi` 1.6.3 は Zod ^4 を peer とする。
-  - **未確認**: shared の素のスキーマを `@hono/zod-openapi` の `createRoute` にそのまま渡せること自体は、公式ドキュメントに明記がない（上記からの推論）。実装フェーズ最初のタスクで動作確認し、成立しない場合は Zod 統一の方針（ADR-0008）は維持したまま、api 側でのラップ方法を見直す（未解決事項）。
+  - **確認済み（実装前の技術検証、2026-10-12）**: shared の素のスキーマを `@hono/zod-openapi` の `createRoute` にそのまま渡せる。リクエストボディ・パスパラメータとも実行時に検証され、shared で定義した日本語のメッセージもそのまま返る。`getOpenAPI31Document` による仕様の生成（`enum`・`pattern`・`format: uuid` を含む）も成立した。検証失敗時の応答はライブラリ既定の形式のため、`common-spec.md` の形式への変換は `defaultHook` で行う（`backend.md` 9章）。
   - `.openapi()` が必要な箇所（コンポーネント名の付与等）は api 側で shared のスキーマをラップして付与する。
-- `zod` は依存として **単一のインスタンス**に保つ（pnpm の peer 依存解決で `@hono/zod-openapi` と同じ `zod` が使われること。実装フェーズ最初のタスクで `pnpm why zod` により確認する）。
+- `zod` は依存として **単一のインスタンス**に保つ（pnpm の peer 依存解決で `@hono/zod-openapi` と同じ `zod` が使われること）。技術検証で `pnpm why zod` により単一の版（4.6.5）に解決されることを確認した。依存を更新したときは再確認する（`@cloudflare/vitest-plugin` は zod を特定の版に固定して依存するため、ずれると複数インスタンスになりうる）。
 - ライブラリのバンドルサイズは Valibot より大きい。FCP 3 秒・Lighthouse 80 の目標（`requirement.md` 6章）に対しては、実装後に計測して判断する（未解決事項）。
 
 ### 4.3 制約値の単一ソース
@@ -226,7 +233,10 @@ flowchart LR
   | フォームの入力検証・エラー文言・制約値 | `shared`（4.1） |
 
 - RPC の型が付くのは、ハンドラが `c.json()` で返すレスポンスである。middleware が返す共通エラー（401 等。`common-spec.md` 2章）には型が付かないため、`client` は `shared` のエラー型で扱う。ラッパの具体は `frontend.md` 4章で確定した（非 2xx レスポンスを `ApiError` へ正規化する薄い関数）。
-- **成立性は実装フェーズ最初のタスクで確認する**（未解決事項）。確認項目は、`OpenAPIHono` のルートを chain で書く必要があるか、ルート数に対する型推論のコスト（IDE・`tsc`）、`client` の型チェックで `AppType` が参照する Workers 型（`D1Database` 等）を解決できるか（tsconfig の `references` の張り方を含む）の3点。成立しない場合は「`shared` の型＋薄い fetch ラッパ」に戻す。
+- **成立性は実装前の技術検証（2026-10-12）で確認した。** `createApp()` の関数化（`AppType = ReturnType<typeof createApp>`。`test.md` 5.5）を含めて、`hc<AppType>` で client のレスポンスの型が効く。確認項目 3 点の結果は次のとおり。
+  - chain の要否：必須（`backend.md` 3.1）。ただし `OpenAPIHono` に `.get()`・`.route()` をチェーンすると戻り値の型が素の `Hono` になり、`getOpenAPI31Document` が型から消える。元のインスタンスとチェーンの戻り値を分ける書き方にする（`backend.md` 3.1）。
+  - Workers 型の解決：client では未解決のまま `skipLibCheck` で黙認される。RPC の型には影響しないため受け入れる（3.2）。
+  - 型推論のコスト：ルート数が確定してから計測する（未解決12）。
 - `openapi-typescript` による型生成は採用しない。依存と生成手順が増え、`shared` の型と役割が重なるため。
 
 ## 5. Worker エントリポイントと wrangler 設定
@@ -246,7 +256,7 @@ flowchart LR
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "gainlog",
   "main": "./src/api/index.ts",
-  "compatibility_date": "<実装時に確定>",
+  "compatibility_date": "2026-10-12",
   "assets": {
     "not_found_handling": "single-page-application",
     "run_worker_first": ["/api/*"]
@@ -264,7 +274,8 @@ flowchart LR
 
 - `assets.directory` は書かない。`@cloudflare/vite-plugin` が `vite build` 時に生成する `wrangler.json` へ、クライアントのビルド出力先を自動で設定する（公式ドキュメント）。
 - `migrations_pattern` は指定せず既定（`migrations/*.sql`）を使う。drizzle-kit 0.31 の出力が平置きの `NNNN_name.sql` であるため一致する（8章）。
-- `compatibility_flags`（`nodejs_compat` の要否）は、ID token 検証ライブラリ等を選定する `backend.md` で確定する。
+- `compatibility_date` はプロジェクト初期化時（2026-10-12）の日付とした。初回デプロイの前に見直す。`database_id` は本番 D1 の作成時に確定する（それまではローカル専用のダミー値を置く）。
+- **`compatibility_flags` は指定しない（`nodejs_compat` は不要）。** 技術検証で、ビルド後の設定が `compatibility_flags: []` の状態でも、`jose` による RS256 の署名・JWKS 検証が本番相当の環境（`vite preview`）で動くことを確認した（`backend.md` 5.1）。
 - `vars` に置く非機密の設定値（例：ログレベル）は 7章。
 
 ### 5.3 バインディング
@@ -294,7 +305,7 @@ export default defineConfig({
 - 開発時は Vite の開発サーバが、Worker を本番と同じ workerd 上で動かす。SPA（HMR）と `/api/*` が同一オリジンで動くため、プロキシ設定や CORS は不要で、`auth.md` の同一オリジン前提（`__Host-` Cookie 等）を開発時にも再現できる。
 - これにより、`architecture.md` 1・4章の「ローカル開発は `wrangler dev` で本番相当を再現する」は「Vite の開発サーバ（workerd 上で Worker を実行）」に読み替える。本番相当という目的は変わらない（追従修正は12章）。
 - ローカル D1 の状態は、Wrangler・Vite プラグインとも既定で `.wrangler/state` を共有する。したがって `wrangler d1 migrations apply gainlog --local` の結果を開発サーバがそのまま使う。
-- **既知の懸念**: `@cloudflare/vite-plugin` 1.54.0 で「`migrations apply --local` 後に `vite dev` を起動すると D1 が古いスキーマを読む」不具合が報告されている（workers-sdk#15362、未 triage）。実装フェーズ最初のタスクで再現の有無を確認し、再現する場合は「Vite の開発サーバ ＋ `wrangler dev` の二段構成」を代替案として再検討する（ADR-0009 に代替案として記録）。
+- **懸念は解消済み**: `@cloudflare/vite-plugin` 1.54.0 で報告されていた「`migrations apply --local` 後に `vite dev` を起動すると D1 が古いスキーマを読む」不具合（workers-sdk#15362）は、報告者の設定ミス（SvelteKit の `platformProxy.persist.path` が別ディレクトリを指していた）として CLOSED になった。技術検証（2026-10-12、1.63.1）でも、空の状態から migration を適用して `vite dev` を起動した場合・起動中に migration を追加で適用した場合のどちらも、最新のスキーマが再起動なしでバインディングから見えることを確認した。二段構成は不要である（ADR-0009）。
 
 ### 6.2 ビルドとデプロイ
 
@@ -329,12 +340,15 @@ export default defineConfig({
 | ソースのマウント | しない（イメージに焼き込んだ成果物のみを動かす） |
 | ポート | `127.0.0.1:4173` にのみ公開する（外部から到達させない） |
 | ローカル D1 の状態 | コンテナ内で使い捨て（ボリュームに永続化しない）。起動のたびに migration（シードを含む。8.4）から再構築される |
-| シークレット | `.dev.vars` はイメージに焼き込まない（`.containerignore` で除外）。実行時に読み取り専用でマウントする |
+| シークレット | `.dev.vars` はイメージに焼き込まない（`.containerignore` で除外）。実行時に、ビルド成果物の `dist/gainlog/.dev.vars` へ読み取り専用でマウントする（下記） |
 | 定義 | `Containerfile` ＋ `compose.yaml`（Compose Spec のため Docker でも起動できる）。`.containerignore` で `node_modules`・`dist`・`.wrangler`・`.dev.vars`・`.git` を除外する |
 | 起動コマンド | `podman-compose` を明示して使う（`podman compose` は環境によって Docker Desktop の `docker-compose` を外部プロバイダとして拾うことを確認したため）。npm scripts で包む（10章） |
 
 - OAuth の redirect URI は完全一致が必要なため、`vite preview` の origin（`http://localhost:4173`）も Google Cloud Console への登録対象になる（7章）。
-- `vite preview` が `.dev.vars` を読み込むか、rootless Podman の警告（`/` が shared mount でない）が読み取り専用マウントに影響するかは未確認である（未解決事項）。
+- **技術検証（2026-10-12）で確認した事項:**
+  - `vite preview` は、ルートの `.dev.vars` ではなく、**ビルド時に生成される `dist/gainlog/.dev.vars`**（生成された `wrangler.json` と同じ場所）を読む。`vite build` の時点でルートに `.dev.vars` があれば、その値が成果物に書き出される（`.assetsignore` により静的アセットとしては配信されない）。コンテナでは `.dev.vars` を除外してビルドし、実行時に `./.dev.vars` を `dist/gainlog/.dev.vars` へマウントすることで、焼き込まずに読み込ませる。
+  - イメージは `node:24-bookworm-slim` の多段ビルドで作成でき（約 900MB）、起動時の migration 適用 → `vite preview` の配信、`127.0.0.1:4173` のみの公開、マウントの読み取り専用を確認した。rootless Podman の「`/` が shared mount でない」警告は出ず、影響はなかった。
+  - **ホストに `.dev.vars` がないまま起動すると、Podman がホスト側に `.dev.vars` という空のディレクトリを作る。** そのため `container:up`（10章）は、起動前に `.dev.vars` がファイルとして存在することを確認し、なければ案内を出して止める。
 - イメージが実際にビルドできることは PR の CI で検証する（9.5）。
 
 ## 7. 環境変数・シークレット・バインディング
@@ -349,8 +363,9 @@ export default defineConfig({
 - OAuth の redirect URI は完全一致が必要（`architecture.md` 5章）で、ローカル（Vite 開発サーバの origin）と本番（`*.workers.dev`）で異なる。ローカル用の redirect URI も Google Cloud Console に登録する必要がある。**redirect URI はリクエストの origin から導出する方式に確定済み**（`backend.md` 5.3）。登録手順は運用手順書のスコープ（`auth.md` 12章）。
 - `.dev.vars.example` にキー名のみを列挙してコミットし、`.dev.vars` は Git 管理しない（2.2）。
 - **CI（GitHub Actions）**: Cloudflare API token を GitHub Secrets に置く（`architecture.md` 6・8章）。Wrangler が対象アカウントを特定するため、`CLOUDFLARE_ACCOUNT_ID` も必要になる見込みで、これは機密ではないため GitHub の Variables に置く（`architecture.md` 8章への追記事項。12章）。アプリのシークレットは CI に渡さない方針は変わらない。
-- **型**: `Env` の型は `wrangler types` で生成し（Git 管理しない）、`postinstall` と `typecheck` で再生成する。シークレット（`wrangler.jsonc` に現れない値）の型付け方法は実装時に確定する（未解決事項）。
-- ローカル開発で `__Host-` プレフィックスの Cookie（`Secure` 必須）が `http://localhost` で受理されるかはブラウザ依存の可能性があり、未確認である（未解決事項。`CONTRIBUTING.md` で扱う。`backend.md` は Cookie 属性自体は 5章で定めるが、この挙動確認は対象としていない）。
+- **型**: `Env` の型は `wrangler types` で生成し（Git 管理しない）、`postinstall` と `typecheck` で再生成する。`wrangler types` はシークレットの型を `.dev.vars` から作るため、`.dev.vars` のない環境（CI 等）ではシークレットが型から欠けて型チェックが失敗する。**そこで `wrangler types --env-file .dev.vars.example` とし、キーのみを並べた `.dev.vars.example` から型を生成する**（`.dev.vars` の有無に関わらず同じ型になることを確認済み）。`.dev.vars.example` にキーを追加し忘れると型エラーで気付ける。
+- `vite dev` は `.dev.vars` を読み込む（確認済み）。`vite preview` の読み込み先は 6.4。
+- ローカル開発で `__Host-` プレフィックスの Cookie（`Secure` 必須）が `http://localhost` で受理されるかは、技術検証で確認した。Chromium（156）では、サーバーの `Set-Cookie`（`Secure; HttpOnly; Path=/`）が `http://localhost` でも保存され、以降のリクエストで送信される。他のブラウザでの挙動は確認していない（`CONTRIBUTING.md` で扱う）。
 
 ## 8. マイグレーション・シード配置
 
@@ -391,6 +406,8 @@ migrations/
 | 本番適用 | CI のみ：`wrangler d1 migrations apply gainlog --remote` | ADR-0004 |
 
 - `drizzle-kit migrate` は使わない。適用経路を Wrangler に一本化し、二重管理を避ける。
+- **`--custom` で生成される SQL ファイルは末尾に改行がない**（`-- Custom SQL migration file, put your code below! --` で終わる）。`echo >>` などで追記すると SQL がコメント行に連結され、中身のない migration が「適用済み」として記録される（技術検証で実際に発生）。エディタで改行してから書くか、ファイル全体を書き直す。
+- `migrations/` ディレクトリは、migration が 0 件の間も `.gitkeep` で維持する。テストの `readD1Migrations('migrations')` はディレクトリがないと ENOENT で失敗するため（`test.md` 4.2）。
 - マイグレーション名は内容が分かるものにする（例：`0003_add_exercise_note`）。
 
 ### 8.3 トリガー DDL（`db.md` 10章 未解決事項2 の回収）
@@ -416,8 +433,18 @@ PRAGMA foreign_keys=ON;
 | リスク | 内容 | 規約 |
 |---|---|---|
 | トリガーの消失 | `DROP TABLE` でそのテーブルのトリガーが削除される | 再作成を含む migration では、同じ migration の末尾でトリガー DDL を再作成する。マイグレーション適用後にトリガーが存在することを、テストで確認する（`test.md` 5.3） |
-| FK の CASCADE | D1 では `PRAGMA foreign_keys` で FK を無効化できない（`db.md` 1章）。子から参照される親テーブル（`users` / `exercises` / `workout_records`）の再作成は、`DROP TABLE` 時の暗黙の削除により `ON DELETE CASCADE` の子行（記録・セット）を消す可能性がある（D1 での実挙動は未検証） | 親テーブルの再作成を伴う migration は原則行わない。必要な場合は、データ退避を含む手順を別途設計し、ローカルの実 D1 で回帰テストしてから適用する |
-| 生成 SQL の見落とし | 意図せず再作成が生成されても気付きにくい | 9章の pre-commit で `migrations/*.sql` に再作成（`__new_` / `DROP TABLE`）を検出し、レビュー済みの印がなければコミットを止める |
+| FK の CASCADE（**実測で確認**） | D1 では `PRAGMA foreign_keys=OFF` も `PRAGMA defer_foreign_keys = ON` も効かず、子から参照される親テーブル（`users` / `exercises` / `workout_records`）を `DROP TABLE` した時点で、`ON DELETE CASCADE` の子行が**全件削除される**（下記の実測結果） | **親テーブルの再作成を伴う migration は禁止する。** 必要になった場合は、その時点で子行の退避・復元を含む手順を設計し、ローカルの実 D1 で回帰テストしてから適用する（手順の設計は本書の更新を伴う） |
+| 生成 SQL の見落とし | 意図せず再作成が生成されても気付きにくい | 9章の pre-commit で `migrations/*.sql` に再作成（`__new_` / `DROP TABLE`）を検出し、レビュー済みの印がなければコミットを止める。**親テーブルの `DROP TABLE` は、印があっても止める**（9.2） |
+
+**親テーブル再作成の実測結果（技術検証、2026-10-12。`workout_records` の CHECK 制約を変更して drizzle-kit に再作成 SQL を生成させ、記録 1 件・セット 2 件の状態で適用）:**
+
+| 条件 | 結果 |
+|---|---|
+| 子（`workout_sets`）に親を参照するトリガー（`trg_workout_records_auto_delete`）がある | `ALTER TABLE ... RENAME` の段階で `error in trigger ...: no such table: main.workout_records` となり、**migration 全体がロールバックされる**（データは残る。トリガーが偶然データを守った形） |
+| 子に親を参照するトリガーがない | **migration は成功として完了し、子行が静かに全件消える**（記録 1 件は残り、セットは 2 → 0） |
+| `PRAGMA foreign_keys=OFF` を `PRAGMA defer_foreign_keys = ON` に置き換える | 結果は上の 2 行と同じ（防げない） |
+
+- 再作成後の CHECK 制約は、生成 SQL 上は一時テーブル名（`"__new_workout_records"."workout_date"`）で参照されるが、RENAME 時に SQLite が参照名を書き換えるため、制約は正しく効く。
 
 ### 8.4 シード（事前定義種目。ADR-0011）
 
@@ -432,7 +459,7 @@ PRAGMA foreign_keys=ON;
 
 ## 9. 品質ゲート・ツールチェーン方針（ADR-0010）
 
-設計判断のみを本書で定める。ツールの実際の導入・設定は実装フェーズ最初のタスク（ローカル環境構築と同じ回）で行う。
+設計判断のみを本書で定める。ツールの実際の導入・設定は品質ゲート・CI の導入時（実装前作業）に行う。
 
 ### 9.1 全体像
 
@@ -453,7 +480,7 @@ PRAGMA foreign_keys=ON;
 | 禁止ファイルガード | `.env*`、`.dev.vars`、`*.pem`、`.wrangler/`（`state` を含むローカル D1）、大容量ファイルの追加を拒否。`.gitignore` との二重防御 |
 | lint・format・型 | ESLint、Prettier（`--check`）、`tsc -b`。staged のファイルを対象にする |
 | 関連テスト | `vitest related --run <staged のソース/テストファイル>`（`test.md` 4.4・2.2）。変更ファイルから依存をたどった関連テストだけを実行し、Red（失敗するテスト）の誤コミットを止める。E2E は対象外。全件は CI の責務で、依存をたどれない変更（設定ファイル・migration 等）の拾い漏れは CI が最終防御線となる。実行時間・拾い漏れは実測して見直す（`test.md` 15章 未解決13） |
-| migration 再作成ガード | `migrations/*.sql` の差分に `__new_` または `DROP TABLE` を含む場合、SQL 先頭に `-- reviewed-rebuild: <理由>` のコメントがなければ失敗させる（8.3） |
+| migration 再作成ガード | `migrations/*.sql` の差分に `__new_` または `DROP TABLE` を含む場合、SQL 先頭に `-- reviewed-rebuild: <理由>` のコメントがなければ失敗させる。ただし**親テーブル（`users` / `exercises` / `workout_records`）の `DROP TABLE` は、コメントがあっても失敗させる**（子行が全件消えるため。8.3） |
 | 要件整合性チェック | 9.4 |
 
 ### 9.3 pre-push（LLM レビュー）
@@ -488,7 +515,7 @@ Git 純正の pre-commit の一部として、LLM を呼ばないルールベー
 - **PR**: 次の2段で実行する。`architecture.md` 6章が定める `main` マージ時のデプロイフローに加えて、PR 時にも検査を行う（追従は12章）。
   1. **gitleaks ジョブ**（先頭・独立）: 依存のインストールもビルドも不要なため最初に実行する。PR のコミット範囲を検査するため checkout は `fetch-depth: 0` とする。gitleaks はバイナリを直接実行する（`gitleaks-action` v2 は Organization のリポジトリでライセンスキーを要するため、将来の移管に備えて依存しない）。
   2. **検査ジョブ**（`needs: gitleaks`）: 依存インストール（`pnpm install --frozen-lockfile`）→ lint → 型チェック → テスト（Vitest）→ ビルド。gitleaks が検知した場合は実行されない。
-  3. **コンテナビルドジョブ**（`needs: gitleaks`。検査ジョブと並列）: `Containerfile` からイメージをビルドし、定義が壊れていないことを確認する（6.4）。起動・動作確認までは行わない。ランナーの Podman を使う想定で、使えない場合は `docker build` で代替する（Containerfile は OCI 準拠のためどちらでもビルドできる）。
+  3. **コンテナビルドジョブ**（`needs: gitleaks`。検査ジョブと並列）: `Containerfile` からイメージをビルドし、定義が壊れていないことを確認する（6.4）。起動・動作確認までは行わない。ランナーの Podman を使う想定で、使えない場合は `docker build` で代替する（Containerfile は OCI 準拠のためどちらでもビルドできる）。GitHub Actions の `ubuntu-24.04` ランナー（イメージ 20261004）には Podman 4.9.3（開発機と同じ版）・Buildah・Docker が導入済みであることを、ランナーイメージの公式の導入ソフト一覧で確認した。podman-compose は入っていないが、このジョブはビルドのみのため `podman build` で足りる。実地での動作は CI の構築時に確認する。
   4. **E2E ジョブ**（`needs: gitleaks`。検査ジョブ・コンテナビルドジョブと並列）: Playwright で主要シナリオを実行する（`test.md` 7・10.1章）。PR の必須チェックとし、`main` では再実行しない。
 - **main**: テスト → ビルド → マイグレーション適用 → `wrangler deploy`（6.2）。テストが失敗した場合はデプロイを中断する。`wrangler deploy` が失敗した場合は、マイグレーションを再適用せずデプロイのみを再試行する（ADR-0004）。
 - PR の必須チェック化（Branch protection）は GitHub の設定であり、`CONTRIBUTING.md`（実装着手直前）で手順化する。必須にするのは検査ジョブ・E2E ジョブ（`test.md` 10.1）で、「マージ前にブランチを最新化」も有効にする（`main` で E2E を再実行しない前提のため）。
@@ -498,6 +525,8 @@ Git 純正の pre-commit の一部として、LLM を呼ばないルールベー
 | 項目 | 内容 |
 |---|---|
 | パッケージマネージャ | pnpm。依存を厳格に解決し、宣言していない依存の参照を防ぐ（3章の依存方向ルールと相性がよい） |
+| 依存のビルドスクリプト | pnpm 12 は依存の `postinstall` 等を既定でブロックする。`pnpm-workspace.yaml` の `allowBuilds` に、必要なもの（`esbuild`・`workerd`。いずれもネイティブバイナリの配置）だけを許可として記載し、Git 管理する。依存を追加して新たにブロックされた場合は、内容を確認してから許可を追加する |
+| 新しい版の採用待ち | pnpm は公開直後の版をすぐには採用しない（技術検証時、公開から 1 日未満の zod 4.6.6 ではなく 4.6.5 が選ばれた）。既定の設定によるものと推測しており、設定値は未確認 |
 | バージョン固定 | `package.json` の `packageManager` と `engines.node`（`>=22.12`。Wrangler が Node 22 以上、Vite が `^20.19 \|\| >=22.12` を要求）。`.nvmrc` で開発環境と CI を揃える |
 | ロックファイル | `pnpm-lock.yaml` をコミットし、CI は `--frozen-lockfile` |
 | モジュール形式 | `"type": "module"` |
@@ -507,13 +536,13 @@ Git 純正の pre-commit の一部として、LLM を呼ばないルールベー
 | `dev` | `vite dev`（6.1） |
 | `build` | `vite build`（6.2） |
 | `preview` | `vite preview`（ビルド成果物を workerd で確認） |
-| `typecheck` | `wrangler types` → `tsc -b` |
+| `typecheck` | `wrangler types --env-file .dev.vars.example` → `tsc -b`（7章。`postinstall` も同じ `wrangler types` を実行する） |
 | `lint` / `format` / `format:check` | ESLint / Prettier |
 | `test` | `vitest run`（全 projects。`test.md` 4.4） |
 | `test:watch` / `test:coverage` | `vitest` / `vitest run --coverage`（`test.md` 4.4・10.3） |
 | `db:generate` / `db:migrate:local` / `db:reset:local` | 8.2 |
 | `e2e` | `frontend.md` 12.3 章で確定（Playwright、ADR-0017） |
-| `container:up` / `container:down` | `podman-compose up --build` / `podman-compose down`（6.4） |
+| `container:up` / `container:down` | `.dev.vars` の存在確認 → `podman-compose up --build` / `podman-compose down`（6.4） |
 
 - 本番デプロイ用の script は設けない。正規経路は CI のみとする（`architecture.md` 6章。ローカルからの `wrangler deploy` は動作確認用途で常用しない）。
 
@@ -521,7 +550,7 @@ Git 純正の pre-commit の一部として、LLM を呼ばないルールベー
 
 - `src/api`・`src/client` の内部構成、レイヤー構成、ミドルウェア、リポジトリ規約（`backend.md` / `frontend.md`）
 - テストの方式・配置・ダブル方針・CI でのテスト範囲・受入条件との対応表（`test.md`）
-- 各ツールの設定ファイルの全文、pre-push レビューのプロンプト、CI のワークフロー定義（実装フェーズ最初のタスク）
+- 各ツールの設定ファイルの全文、pre-push レビューのプロンプト、CI のワークフロー定義（品質ゲート・CI の導入時）
 - 開発者向け操作手順（`CONTRIBUTING.md`。実装着手直前に作成）、preview URL の運用（ADR-0002）
 - Skills の整備（本書確定後、ディレクトリ構成が固まった時点で再提起する）
 - Phase 2 の機能
@@ -547,17 +576,18 @@ Git 純正の pre-commit の一部として、LLM を呼ばないルールベー
 
 ## 13. 未解決事項
 
-1. **`@cloudflare/vite-plugin` と D1 のスキーマ読み取り**（workers-sdk#15362）の再現確認。再現する場合は、Vite ＋ `wrangler dev` の二段構成を再検討する。実装フェーズ最初のタスク。
-2. **D1 上でのテーブル再作成の実挙動**（`PRAGMA foreign_keys=OFF` を含む migration が Wrangler の適用でどう扱われるか、親テーブル再作成時に子行が消えるか）。実 D1（ローカル）での実測が必要。実装フェーズ初期。
-3. **`.dev.vars` の Vite プラグインでの読み込み**と、シークレットの型付け方法（`wrangler types` の扱い）。実装フェーズ初期に確認する。
+1. ~~**`@cloudflare/vite-plugin` と D1 のスキーマ読み取り**（workers-sdk#15362）~~ → **解決済み**（実装前の技術検証、2026-10-12）。issue は報告者の設定ミスとして CLOSED、実測でも再現せず、二段構成は不要（6.1）。
+2. ~~**D1 上でのテーブル再作成の実挙動**~~ → **解決済み**（同上）。`PRAGMA foreign_keys=OFF`・`defer_foreign_keys` とも効かず、親テーブルの `DROP TABLE` で子行が CASCADE で全件消えることを確認した。親テーブルの再作成は禁止とする（8.3・9.2）。
+3. ~~**`.dev.vars` の Vite プラグインでの読み込み**と、シークレットの型付け方法~~ → **解決済み**（同上）。`vite dev` は読み込む。`vite preview` は `dist/gainlog/.dev.vars` を読む（6.4）。型は `wrangler types --env-file .dev.vars.example` で生成する（7章）。
 4. **Vitest（client・shared）から Cloudflare プラグインを除外する具体的な方法**（`test.md` 4.1 で確定済み：`vitest.config.ts` を `vite.config.ts` から独立して定義する）。
-5. **OAuth の redirect URI の導出方法（確定済み：リクエストの origin から導出。`backend.md` 5.3）**と、残る **`__Host-` Cookie の `http://localhost` での挙動**（`CONTRIBUTING.md`）。
+5. **OAuth の redirect URI の導出方法（確定済み：リクエストの origin から導出。`backend.md` 5.3）**と、**`__Host-` Cookie の `http://localhost` での挙動**（Chromium では受理されることを技術検証で確認済み。7章。他ブラウザの扱いは `CONTRIBUTING.md`）。
 6. **Zod のバンドルサイズ**が FCP・Lighthouse の目標に与える影響（実装後に計測。必要なら `zod/mini` 等を検討）。
-7. **`compatibility_date`・`compatibility_flags`（`nodejs_compat`）**：`jose`・`crypto.subtle` は標準 Web API のみで完結する見込み（`backend.md` 13章）。実装フェーズ最初のタスクで確定する。
+7. ~~**`compatibility_date`・`compatibility_flags`（`nodejs_compat`）**~~ → **解決済み**（同上）。`nodejs_compat` は不要で `compatibility_flags` は指定しない。`compatibility_date` は初期化時の日付とし、初回デプロイの前に見直す（5.2）。
 8. **drizzle-kit 1.0 の GA 後の移行**（マイグレーションの配置形式が変わる。8.1）。
 9. **pre-push の LLM レビュー**のプロンプト・出力形式・所要時間とコストの実測（実装フェーズ）。
 10. **要件整合性チェックの許可リスト**の初期内容（6章の技術名とパッケージ名の対応表）。
-11. **shared の素の Zod スキーマを `@hono/zod-openapi` の `createRoute` に渡せるか**（4.2）。実装フェーズ最初のタスクで確認する。
-12. **Hono RPC の成立性**（4.5）：`OpenAPIHono` での chain の要否は一次情報で確認し**必須と確定した**（`backend.md` 3.1）。残るのは型推論のコスト、`client` の型チェックでの Workers 型の解決。実装フェーズ最初のタスクで確認し、成立しない場合は「`shared` の型＋薄い fetch ラッパ」に戻す。 `test.md` 5.5 の `createApp` 関数化（`AppType = ReturnType<typeof createApp>`）でも型推論が維持されることを同時に確認する。
-13. **コンテナでのビルド成果物確認**（6.4）：`vite preview` が `.dev.vars` を読み込むか、rootless Podman の警告（`/` が shared mount でない）の影響、GitHub Actions のランナーでの Podman の利用可否。実装フェーズ最初のタスクで確認する。
+11. ~~**shared の素の Zod スキーマを `@hono/zod-openapi` の `createRoute` に渡せるか**~~ → **解決済み**（同上）。型・実行時の検証とも成立し、OpenAPI 仕様の生成もできる（4.2）。
+12. **Hono RPC の成立性**（4.5）：技術検証で成立を確認した（`createApp` の関数化を含む。Workers 型は client で未解決のまま `skipLibCheck` で黙認されるが、RPC の型には影響しない。3.2）。**残るのはルート数が確定してからの型推論のコストの計測**のみ。
+13. ~~**コンテナでのビルド成果物確認**~~ → **解決済み**（同上）。`vite preview` の `.dev.vars` の読み込み先、rootless Podman の警告の影響なし、GitHub Actions のランナーの Podman 4.9.3（一次情報）を確認した（6.4・9.5）。ランナーでの実地確認は CI の構築時に行う。
 14. `backend.md`・`frontend.md`・`test.md` へ引き継ぐ事項：リポジトリ層の内部構成と `userId` の必須化・種目シードの内容・OpenAPI 仕様の生成経路は `backend.md` で確定済み。RPC クライアントのラッパと共通エラーの扱いは `frontend.md` 4章で確定済み。統合テストの配置と CI での必須化・トリガー存在テスト・CHECK 制約の突合テスト・事前定義種目がある前提のテストデータは `test.md`（5・9・10章）で確定済み。
+15. **設定ファイル（`vite.config.ts`・`vitest.config.ts`・`drizzle.config.ts` 等）の型チェック**：現在の tsconfig 3 分割のどれにも含まれず、型チェックの対象外になっている（3.2）。品質ゲートの導入時に、専用の tsconfig を足すか等を決める。

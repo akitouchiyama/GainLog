@@ -24,7 +24,7 @@
 - **トリガー**: `db.md` 7章の DDL を、`--custom` で作成した migration として追記型（append-only）で管理する。
 - **テーブル再作成の規約**: drizzle-kit は CHECK 制約の変更などに対して、`PRAGMA foreign_keys=OFF` → 新テーブル作成 → `DROP TABLE` → RENAME という再作成 SQL を生成する（drizzle-kit 0.31.10 で実測）。これにより次のリスクがある。
   - `DROP TABLE` でトリガーが消える → 再作成を含む migration では、末尾でトリガーを再作成し、適用後にトリガーが存在することをテストで確認する。
-  - D1 は FK を無効化できない（`db.md` 1章）ため、親テーブルの再作成は `ON DELETE CASCADE` の子行を消す可能性がある（D1 での実挙動は未検証）→ 親テーブルの再作成を伴う migration は原則行わず、必要な場合はデータ退避を含む手順を別途設計してローカルの実 D1 で回帰テストする。
+  - D1 は FK を無効化できない（`db.md` 1章）ため、親テーブルの再作成は `ON DELETE CASCADE` の子行を消す。実装前の技術検証（2026-10-12）で、`PRAGMA foreign_keys=OFF`・`defer_foreign_keys` のどちらでも子行が全件消えることを確認した → **親テーブルの再作成を伴う migration は禁止する**。必要になった場合は、データ退避を含む手順を設計してローカルの実 D1 で回帰テストする（`project-structure.md` 8.3）。
   - 生成 SQL の見落とし → pre-commit で再作成（`__new_` / `DROP TABLE`）を検出し、`-- reviewed-rebuild: <理由>` のレビュー済みコメントがなければコミットを止める（ADR-0010）。
 
 詳細は `docs/Design/Detailed/project-structure.md` 8章。
