@@ -18,7 +18,9 @@
     "postinstall": "wrangler types --env-file .dev.vars.example",
     "db:generate": "drizzle-kit generate",
     "db:migrate:local": "wrangler d1 migrations apply gainlog --local",
-    "db:reset:local": "rm -rf .wrangler/state && pnpm db:migrate:local"
+    "db:reset:local": "rm -rf .wrangler/state && pnpm db:migrate:local",
+    "container:up": "test -f .dev.vars || { echo '.dev.vars がありません。.dev.vars.example をコピーして値を設定してください（ないまま起動すると Podman が同名の空ディレクトリを作ります）' >&2; exit 1; } && podman-compose up --build",
+    "container:down": "podman-compose down"
   },
   "dependencies": {
     "@hono/zod-openapi": "^1.6.3",
