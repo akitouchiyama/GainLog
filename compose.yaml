@@ -1,0 +1,12 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Containerfile
+    ports:
+      # 外部から到達させないため 127.0.0.1 にのみ公開する
+      - '127.0.0.1:4173:4173'
+    volumes:
+      # vite preview は生成された wrangler.json と同じディレクトリの .dev.vars を読む。
+      # イメージには焼き込まず、実行時に読み取り専用でマウントする
+      - ./.dev.vars:/app/dist/gainlog/.dev.vars:ro
