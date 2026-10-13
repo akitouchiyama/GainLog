@@ -55,7 +55,7 @@
 | | `@testing-library/user-event` | 14.6.7 | |
 | | `@testing-library/jest-dom` | 7.0.1（peer: `@testing-library/dom >=10 <11`） | |
 | API のモック（client） | `msw` | 3.0.3（peer: `vite >=6`、`typescript >=5.9`） | |
-| カバレッジ | `@vitest/coverage-v8` または `@vitest/coverage-istanbul` | 5.0.3（`vitest` と同一版が必須） | プロバイダは 10章・15章 未解決 |
+| カバレッジ | `@vitest/coverage-v8` | 5.0.3（`vitest` と同一版が必須） | **v8 に確定**（10.3。istanbul も workerd 上で計測でき結果は一致したが、速い v8 を採用） |
 | E2E | `@playwright/test` | 1.64.0 | ADR-0017。`frontend.md` 1章で記載済み |
 
 - `@msw/cloudflare`（Worker 内の外向き `fetch` のモック）は採用しない。Google への外向き呼び出しは、`GoogleOAuthClient`・`IdTokenVerifier` を fake に差し替える方針とする（8章。ADR-0018）。
@@ -153,19 +153,22 @@ flowchart LR
 ### 4.2 api プロジェクト（Workers 環境・ローカル D1）
 
 - 実装は workerd 上で実行され、本番と同じランタイムで `crypto.subtle`・`crypto.randomUUID()`・D1 バインディングが動く。
-- **migration の適用**：Node 側（設定ファイル）で `readD1Migrations('migrations')`（`@cloudflare/vitest-plugin/config`）により `migrations/` を読み込み、setup ファイル（Workers 環境側）で `applyD1Migrations(env.DB, migrations)`（`cloudflare:test`）を実行する。シード・トリガーも migration のため、**適用後は「事前定義種目18件＋トリガー5本」が入った状態がテストのベースライン**になる（ADR-0011）。migrations ディレクトリの内容を直接使うため、本番と同一の SQL が検証される。
-- **データ分離の規約（ストレージ分離に依存しない）**：D1 のテスト間のストレージ分離の挙動は公式ドキュメントで確認できなかったため（15章 未解決1）、次の規約でテストを成立させる。
+- **migration の適用**：Node 側（設定ファイル）で `readD1Migrations('migrations')`（`@cloudflare/vitest-plugin` のパッケージ直下から import する。`/config` サブパスは 1.4.0 には存在しない）により `migrations/` を読み込み、setup ファイル（Workers 環境側）で `applyD1Migrations(env.DB, migrations)`（`cloudflare:test`）を実行する。migration の配列は設定ファイルでバインディング（例：`TEST_MIGRATIONS`）として渡す。`migrations/` がないと `readD1Migrations` が ENOENT で失敗するため、migration が 0 件の間も `.gitkeep` でディレクトリを維持する（`project-structure.md` 8.2）。シード・トリガーも migration のため、**適用後は「事前定義種目18件＋トリガー5本」が入った状態がテストのベースライン**になる（ADR-0011）。migrations ディレクトリの内容を直接使うため、本番と同一の SQL が検証される。
+- **Worker の `env`・エントリの取得**：`cloudflare:test` の `env`・`SELF` は 1.4.0 で deprecated のため、`cloudflare:workers` の `env`・`exports`（`exports.default.fetch()`）を使う。API 統合テストは 5.5 のとおり `app.request()` を使う。
+- **ストレージ分離の実挙動（技術検証で確認）**：D1 のストレージは**テストファイル単位で分離され、同じファイル内のテスト間では共有される**（前のテストで入れた行が次のテストから見える）。ファイルの実行が直列でも並列でも同じだった。
+- **データ分離の規約（ストレージ分離に依存しない）**：同じファイル内では共有されるため、次の規約でテストを成立させる（分離単位が将来変わっても成り立つ）。
   1. 各テストは**自分でユーザー（と必要なデータ）をビルダーで作り**、他のテストのデータの有無に依存しない（9.3）。
   2. 件数の検証は**グローバルに数えない**。「自分の `userId` に属する行」に限定する。
   3. シード（事前定義種目）を変更・削除するテストは書かない。シードの検証（8.4 相当）は読み取りのみ。
   4. `reset()`（全バインディングのデータ削除）は**使わない**。シードごと消えるため。
 - テストごとに固有の ID（`crypto.randomUUID()`）を使うため、同一ファイル内・ファイル間のデータは衝突しない。
+- Workers 環境（api プロジェクト）のテスト内の `console.log` は、既定のレポーターでは表示されない。調査時は `--reporter=verbose` を付ける。
 
 ### 4.3 client プロジェクト（jsdom）
 
-- setup ファイルで `@testing-library/jest-dom` の拡張、`msw/node` のサーバー起動（`onUnhandledRequest: 'error'`）、各テスト後の `cleanup`・ハンドラのリセットを行う。
+- setup ファイルで `@testing-library/jest-dom` の拡張、`msw/node` のサーバー起動（`onUnhandledFrame: 'error'`。**msw 3 で `onUnhandledRequest` から改名された。旧名は型エラーになるだけでなく実行時には黙って無視され、既定の `warn`（警告のみでテストは失敗しない）で動く**ことを技術検証で確認した）、各テスト後の `cleanup`・ハンドラのリセットを行う。
 - `QueryClient` は**テストごとに新規作成**する（キャッシュの持ち越しを避ける。`retry: false` は本番設定と同じ。`frontend.md` 5.1）。レンダーヘルパーは `src/client/testing/` に置く（9.2）。
-- `<dialog>` の `showModal()` が jsdom で動作するかは未確認（15章 未解決2）。動かない場合は、setup で最小のスタブを入れるか、ダイアログの開閉検証を E2E に寄せる。
+- **jsdom（30.1.2）は `<dialog>` の `showModal()`・`close()` を実装していない**（技術検証で確認）。setup で開閉だけを再現する最小のスタブ（`showModal` で `open` を立てる、`close(値)` で `open` を下ろして `returnValue` を設定し `close` イベントを発火する）を入れ、開閉に伴う表示・コールバックはコンポーネントテストで検証する。フォーカスの移動・Esc キー・背景の操作不可など実ブラウザの挙動は E2E で確認する（7章）。
 
 ### 4.4 npm scripts（`project-structure.md` 10章の `test` 行を具体化）
 
@@ -195,7 +198,7 @@ flowchart LR
 |---|---|
 | 所有者による絞り込み | ユーザー A のデータが、ユーザー B の `userId` では**取得・更新・削除のいずれもできない**こと（`WorkoutRecord`・`WorkoutSet`・ユーザー追加 `Exercise`）。`backend.md` 6.2 の表の行ごとに1ケース以上 |
 | 事前定義種目の可視性 | 全ユーザーから見える（一覧・個別）。編集・削除の可否は 5.5 の API 統合側で確認し、リポジトリでは `owner_user_id IS NULL` の判別を返せること |
-| 制約違反 → `ConflictError` | UNIQUE（`(owner_user_id,name)`・`(user_id,workout_date)`・`(workout_record_id,exercise_id,set_number)`）と RESTRICT（使用中種目の削除）が `ConflictError` に変換される。**エラーの判別パターン（エラーメッセージ・コード文字列）はここで実測して固定する**（`backend.md` 15章 未解決1 の回収。実装フェーズ最初のタスク） |
+| 制約違反 → `ConflictError` | UNIQUE（`(owner_user_id,name)`・`(user_id,workout_date)`・`(workout_record_id,exercise_id,set_number)`）と RESTRICT（使用中種目の削除）が `ConflictError` に変換される。エラーの判別パターンは技術検証で実測済み（`backend.md` 7.4）。**RESTRICT は extended コードが `SQLITE_CONSTRAINT_TRIGGER` になる**ため、取りこぼしがないことをこのテストで固定する |
 | 自己ベスト（`findBestSet`） | `db.md` 8章の確定 SQL の仕様を表で固定する（5.2.1） |
 | 日付範囲の集計（`summarizeByDateRange`） | 範囲の両端を含む／範囲外を含まない／セット0件の記録は存在しない（トリガーにより自動削除済み）／他ユーザーの記録を含まない |
 | `batch()` の原子性 | `upsertAndAddSets` の途中（2文目）で制約違反が起きたとき、1文目（`workout_records` の INSERT）もロールバックされ、孤立した記録が残らないこと |
@@ -238,7 +241,7 @@ flowchart LR
 
 - アプリ全体（ミドルウェア〜ルート〜リポジトリ〜実 D1）を、`app.request()`（Hono のテスト用ヘルパー）で呼び出して検証する。
 - **差し替えるのは外部境界のみ**：`IdTokenVerifier`・`GoogleOAuthClient`（Google の token endpoint 呼び出し）。`Clock`・`IdGenerator`・リポジトリは**本物を使う**。時刻に依存する観点（セッションの24時間期限）は、**DB に過去の時刻を持つセッション行を直接 INSERT する**ことで再現する（`Clock` を差し替えない）。
-- そのため、アプリ生成を関数化して外部境界を差し替え可能にする（`createApp({ idTokenVerifier, googleOAuthClient })`。`export default` は本番の組み立て、`AppType` は `ReturnType<typeof createApp>`。`backend.md` 3.1 への追従が必要。14章）。
+- そのため、アプリ生成を関数化して外部境界を差し替え可能にする（`createApp({ idTokenVerifier, googleOAuthClient })`。`export default` は本番の組み立て。`AppType` の書き方は `backend.md` 3.1（追従済み）。関数化しても RPC の型推論が保たれることは技術検証で確認済み）。
 - 認証済みリクエストは、ビルダーで users・sessions を作り、生トークンを `Cookie: __Host-session=<token>` として付ける（ログインフローを毎回通さない）。
 - 状態変更系には `Content-Type: application/json` と `Sec-Fetch-Site: same-origin` を付けるヘルパーを用意する（付けないケースは専用テストで確認）。
 
@@ -275,7 +278,7 @@ flowchart LR
 | ユーザー追加 `Exercise`（`PATCH`・`DELETE`・`best-set`） | 404 |
 | 事前定義 `Exercise`（`PATCH`・`DELETE`） | **403**（全ユーザーに可視のため。404 ではない） |
 
-- **網羅性の自動検査**：アプリのルート一覧（`app.routes`）から全エンドポイントを列挙し、「所有者チェック対象表」または「対象外（認証・一覧等）の明示リスト」のどちらかに必ず含まれていることを検査するテストを置く。**エンドポイントを追加したのに横断テストへ追加し忘れると、このテストが失敗する**（`auth.md` 13章「実装ミスを検知する最終防御線」の実効性を保つため。`OpenAPIHono` から `app.routes` を列挙できるかは実装時に確認する。15章 未解決3）。
+- **網羅性の自動検査**：アプリのルート一覧（`app.routes`）から全エンドポイントを列挙し、「所有者チェック対象表」または「対象外（認証・一覧等）の明示リスト」のどちらかに必ず含まれていることを検査するテストを置く。**エンドポイントを追加したのに横断テストへ追加し忘れると、このテストが失敗する**（`auth.md` 13章「実装ミスを検知する最終防御線」の実効性を保つため）。技術検証で `OpenAPIHono` から `app.routes` を列挙できることを確認した。ただし `.openapi()` で登録したルートは検証用ミドルウェアの分も含めて**同じ `METHOD path` が複数回現れる**ため、`METHOD path` で重複を除いてから突き合わせる。
 - 併せて、**未認証での全 `/api/*`（`/auth/login`・`/auth/callback`・`/auth/logout` を除く。logout は未認証でも 204 の冪等な仕様。5.4）が 401** になることも同じ列挙で確認する。
 - ユーザー A・B はビルダーで作り（9.3）、B のリクエストが**A のデータを一切変更していない**ことも、A のデータを再取得して確認する（404 を返しつつ書き込みが走っていた、という実装ミスを検出するため）。
 
@@ -358,7 +361,7 @@ Google ログインは実際には通せないため、**セッションを直�
 
 1. テストごとに、固有の `google_sub`・email のユーザーを `users` へ INSERT する。
 2. 生トークン（十分に長いランダム値）を生成し、**SHA-256 の16進数ハッシュ**（`db.md` 5.2）を `sessions.id` として INSERT する（`expires_at` は未来）。
-3. 生トークンを `__Host-session` Cookie として、Playwright の `context.addCookies`（`secure: true`・`path: '/'`・`domain` なし相当・`httpOnly: true`）で注入する。
+3. 生トークンを `__Host-session` Cookie として、Playwright の `context.addCookies`（`domain: 'localhost'`・`path: '/'`・`secure: true`・`httpOnly: true`・`sameSite: 'Lax'`）で注入する。技術検証（Chromium 156）で、この指定なら `http://localhost` へのリクエストで Cookie が送信されることを確認した。**`url` を指定する書き方は `Invalid cookie fields` で失敗する**ため使わない。Chromium が `__Host-`（Domain 属性を禁止する）の Cookie として受理したことから、`domain: 'localhost'` の指定はホスト限定の Cookie として扱われていると判断した。
 4. SQL の実行は、`wrangler d1 execute gainlog --local --command/--file` を呼ぶ補助関数（`e2e/support/db.ts`）で行う。**`--local` は補助関数の中に固定で埋め込み、引数・環境変数で外せないようにする**（付け忘れで本番 D1 に書き込む事故を防ぐため）。**ローカル D1 の状態は Wrangler と Vite プラグインが `.wrangler/state` を共有する**（`project-structure.md` 6.1）ことに依拠する。
 
 - **本番コードにテスト専用のログイン経路・分岐・環境変数を一切追加しない**（誤って本番に紛れ込むリスクを持たないため。ADR-0019）。
@@ -468,7 +471,7 @@ Google ログインは実際には通せないため、**セッションを直�
 - **計測のみ・閾値なし**。CI で `vitest run --coverage` によりレポートを出力し（ジョブサマリー等に要約を表示）、**テストの漏れの発見に使う**。合否判定には使わない（数値目標が目的化し、意味の薄いテストを誘発しやすいため。TDD では「テストを書いたから実装がある」ため、通常は高くなる）。
 - 対象は `src/**` のうち、テスト支援コード（`testing/`）・型定義・エントリ（`main.tsx`・`index.ts`）・生成物を除く。
 - E2E（Playwright）のカバレッジは計測しない。
-- カバレッジのプロバイダ（`@vitest/coverage-v8`／`@vitest/coverage-istanbul`）は、**workerd 上のコードを計測できるか**に依存する。公式ドキュメントでは確認できなかったため、実装フェーズ最初のタスクで実測して決める（15章 未解決4）。計測できない場合は、api の計測を諦める・Node 側のみ計測する等を含めて再検討する。
+- **カバレッジのプロバイダは v8（`@vitest/coverage-v8`）に確定した。** 技術検証で、v8・istanbul とも workerd 上の api のコード（`exports.default.fetch` 経由で実行されたハンドラ）を計測でき、結果も一致した。差は速さのみのため、Vitest の既定で速い v8 を採用する。テストが失敗するとレポートは出力されない（調査時は `--coverage.reportOnFailure` を付ける）。
 
 ## 11. 受入条件との対応表
 
@@ -558,18 +561,18 @@ Google ログインは実際には通せないため、**セッションを直�
 
 ## 15. 未解決事項
 
-実装フェーズ最初のタスク（ローカル環境構築と同じ回）で確認する事項を中心に挙げる。
+1〜8・11 は実装前の技術検証（2026-10-12）で確認した。番号は他の文書から参照されるため維持する。
 
-1. **D1 のテスト間ストレージ分離の挙動**：公式ドキュメントでは確認できなかった。本書は分離に依存しない規約（4.2）で成立させているため設計は変わらないが、実際の分離の有無を実測する。分離される場合でも規約は維持する。
-2. **jsdom での `<dialog>`（`showModal()`・`close()`）の動作**：未確認。動かない場合は setup でのスタブ、またはダイアログの開閉検証を E2E に寄せる（`frontend.md` 17章 未解決6 の `close` 判定の実装詳細とあわせて決める）。
-3. **`OpenAPIHono` からのルート一覧の列挙（`app.routes`）**：所有者チェック横断テストの網羅検査（5.6）が成立するかを確認する。成立しない場合は、ルート定義側から一覧を組み立てる等の代替を検討する。
-4. **Vitest 5 と `@cloudflare/vitest-plugin` 1.4.0 の組み合わせ・カバレッジ**：peer 上は `vitest ^4.1 || ^5` だが、実際の動作・カバレッジプロバイダ（v8／istanbul）の対応は未確認。合わない場合は **Vitest 4.1 系に落とす**（`vitest@4.1.11` は `vite ^6〜^8` を peer とする）。`msw` 3.0.3（peer: `typescript >=5.9`）・`@testing-library/jest-dom` 7.0.1・`jsdom` 30.1.2 との組み合わせも同時に確認する。
-5. **E2E のローカル D1 への書き込み**：`wrangler d1 execute --local` による書き込みが、起動中の `vite preview`（別プロセスの Miniflare）から即座に見えるか、同時アクセスで競合しないかが未確認。成立しない場合は、`webServer` の起動前に全データを投入する方式（ユーザーを事前作成）へ切り替える。
-6. **`__Host-` プレフィックスの Cookie が `http://localhost` で受理されるか**（`project-structure.md` 13章 未解決5 の残り）：E2E のセッション注入（7.2）がこの挙動に依存する。Chromium で受理されない場合は、E2E のみ別の方式（`https` のローカル起動等）を検討する。
-7. **テストコードの tsconfig と lint**：api のテストが使う `cloudflare:test` 等の型の読み込み方、`vitest` のグローバルの扱い、`testing/` の import 禁止ルール（9.2）を `no-restricted-imports` で実現できるか。tsconfig を分割する（`tsconfig.api.test.json` 等）か、既存の3分割に型を足すかを実装時に決める。
-8. **ライブラリの版の再確認**：1章の表は 2026-10-10 時点。特に wrangler・`@cloudflare/vite-plugin`・`@cloudflare/vitest-plugin` は依存関係が連動するため、`pnpm why wrangler` で単一の版に解決されることを確認する。
+1. ~~**D1 のテスト間ストレージ分離の挙動**~~ → **解決済み**。テストファイル単位で分離され、同じファイル内のテスト間では共有される。規約（4.2）は維持する。
+2. ~~**jsdom での `<dialog>`（`showModal()`・`close()`）の動作**~~ → **解決済み**。jsdom 30.1.2 は未実装のため、setup の最小スタブ＋実ブラウザの挙動は E2E とした（4.3）。`close` 判定の実装詳細は `frontend.md` 17章 未解決6 のまま残る。
+3. ~~**`OpenAPIHono` からのルート一覧の列挙（`app.routes`）**~~ → **解決済み**。列挙できる。同じ `METHOD path` が重複して現れるため、重複を除いて使う（5.6）。
+4. ~~**Vitest 5 と `@cloudflare/vitest-plugin` 1.4.0 の組み合わせ・カバレッジ**~~ → **解決済み**。Vitest 5.0.3 のまま動作し、カバレッジは v8 に確定した（10.3）。`msw` 3.0.3・`@testing-library/jest-dom` 7.0.1・`jsdom` 30.1.2 との組み合わせも動作した（`@vitest/mocker` 5.0.3 が msw `^2.4.9` を peer とする警告が出るが、`msw/node` の動作に影響はなかった）。
+5. ~~**E2E のローカル D1 への書き込み**~~ → **解決済み**。`wrangler d1 execute --local` の書き込みは起動中の `vite preview` から即座に見え、並列の読み取り中に書き込んでも競合しなかった。7.2 の方式のままでよい。
+6. ~~**`__Host-` プレフィックスの Cookie が `http://localhost` で受理されるか**~~ → **解決済み**。Chromium 156 で受理・送信される。注入は `domain: 'localhost'`・`path: '/'` で行う（7.2）。
+7. **テストコードの tsconfig と lint**：型の読み込み方は確定した（`tsconfig.api.json` の `types` に `@cloudflare/vitest-plugin/types` を足す。tsconfig は分割しない。`project-structure.md` 3.2）。**残るのは lint**：本番コードからの `cloudflare:test` の import 禁止、`testing/` の import 禁止（9.2）を `no-restricted-imports` で実現できるか。品質ゲートの導入時に確認する。
+8. ~~**ライブラリの版の再確認**~~ → **解決済み**。導入した版は 1章・`project-structure.md` 1章のとおり。`pnpm why wrangler` で 4.149.0 の単一の版に解決されることを確認した。
 9. **fake と本物の契約テスト**（8章）：Phase 1 では必須としないが、fake の挙動のずれで不具合が出た時点で導入を検討する。
 10. **E2E の CI**：Playwright のブラウザのキャッシュ、所要時間、`retries`・`workers` の初期値の妥当性（7.1・7.4）。実測して見直す。
-11. **テーブル再作成時の親行・子行の実挙動**（`project-structure.md` 13章 未解決2 の持ち越し）：再作成を含む migration を書く段階で、5.3 の層に回帰テストを追加する。
+11. ~~**テーブル再作成時の親行・子行の実挙動**~~ → **解決済み**（`project-structure.md` 8.3）。親テーブルの再作成は子行が全件消えるため禁止とした。子テーブルの再作成を含む migration を書く場合は、トリガーの再作成を 5.3 の層の回帰テストで確認する。
 12. **手動確認手順の具体化**（12章）：URL・計測コマンド・記録の置き場所を、初回デプロイの前に確定する。
-13. **pre-commit の関連テスト**（2.2、`project-structure.md` 9.2）：`vitest related` が workerd 上の `api` プロジェクトでも期待どおり動くか、所要時間が TDD の小さなコミットを妨げないかを実測する。遅い・拾い漏れが多い場合は、対象を `shared`・`client` に絞る、または pre-commit から外して CI のみにする。
+13. **pre-commit の関連テスト**（2.2、`project-structure.md` 9.2）：`vitest related` が workerd 上の `api` プロジェクトでも期待どおり動くか、所要時間が TDD の小さなコミットを妨げないかを実測する。遅い・拾い漏れが多い場合は、対象を `shared`・`client` に絞る、または pre-commit から外して CI のみにする。品質ゲートの導入時に確認する。
