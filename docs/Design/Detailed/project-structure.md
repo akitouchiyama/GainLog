@@ -498,7 +498,7 @@ Git 純正の pre-commit の一部として、LLM を呼ばないルールベー
 | 項目 | 内容 |
 |---|---|
 | パッケージマネージャ | pnpm。依存を厳格に解決し、宣言していない依存の参照を防ぐ（3章の依存方向ルールと相性がよい） |
-| バージョン固定 | `package.json` の `packageManager` と `engines.node`（`>=22.12`。Wrangler が Node 22 以上、Vite が `^20.19 \|\| >=22.12` を要求）。`.nvmrc` で開発環境と CI を揃える |
+| バージョン固定 | `package.json` の `packageManager` と `engines.node`（`>=24.22.1`。Wrangler が Node 22 以上、Vite が `^20.19 \|\| >=22.12` を要求することに加え、2026-10-21 のセキュリティリリース（eMudhra 中間 CA 侵害に対応する ca-certs 更新を含む）を下限とする）。`.nvmrc` で開発環境と CI を揃える |
 | ロックファイル | `pnpm-lock.yaml` をコミットし、CI は `--frozen-lockfile` |
 | モジュール形式 | `"type": "module"` |
 
