@@ -57,6 +57,14 @@ export default defineConfig({
           setupFiles: ['./src/api/testing/apply-migrations.ts'],
         },
       },
+      {
+        // Git フックから呼ぶ決定論チェック（project-structure.md 9章）
+        test: {
+          name: 'scripts',
+          environment: 'node',
+          include: ['scripts/**/*.test.ts'],
+        },
+      },
     ],
   },
 })
