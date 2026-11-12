@@ -527,7 +527,7 @@ Git 純正の pre-commit の一部として、LLM を呼ばないルールベー
 | パッケージマネージャ | pnpm。依存を厳格に解決し、宣言していない依存の参照を防ぐ（3章の依存方向ルールと相性がよい） |
 | 依存のビルドスクリプト | pnpm 12 は依存の `postinstall` 等を既定でブロックする。`pnpm-workspace.yaml` の `allowBuilds` に、必要なもの（`esbuild`・`workerd`。いずれもネイティブバイナリの配置）だけを許可として記載し、Git 管理する。依存を追加して新たにブロックされた場合は、内容を確認してから許可を追加する |
 | 新しい版の採用待ち | pnpm は公開直後の版をすぐには採用しない（技術検証時、公開から 1 日未満の zod 4.6.6 ではなく 4.6.5 が選ばれた）。既定の設定によるものと推測しており、設定値は未確認 |
-| バージョン固定 | `package.json` の `packageManager` と `engines.node`（`>=24.22.1`。Wrangler が Node 22 以上、Vite が `^20.19 \|\| >=22.12` を要求することに加え、2026-10-21 のセキュリティリリース（eMudhra 中間 CA 侵害に対応する ca-certs 更新を含む）を下限とする）。`.nvmrc` で開発環境と CI を揃える |
+| バージョン固定 | `package.json` の `packageManager` と `engines.node`（`>=24.22.3`。Wrangler が Node 22 以上、Vite が `^20.19 \|\| >=22.12` を要求することに加え、2026-11-11 のセキュリティリリース（High 7件を含む。HTTP/2・TLS の脆弱性修正）を下限とする。2026-10-21 のセキュリティリリース（eMudhra 中間 CA 侵害に対応する ca-certs 更新を含む）の修正も包含する）。`.nvmrc` で開発環境と CI を揃える |
 | ロックファイル | `pnpm-lock.yaml` をコミットし、CI は `--frozen-lockfile` |
 | モジュール形式 | `"type": "module"` |
 
