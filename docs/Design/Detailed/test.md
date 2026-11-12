@@ -228,7 +228,7 @@ flowchart LR
 | **トリガーの挙動** | ①最後のセットを削除すると `workout_records` が自動削除される ②セットが残っていれば削除されない ③日単位削除（`workout_records` の直接 DELETE）で CASCADE が走っても整合が保たれる（冗長な DELETE が発生しても失敗しない。`db.md` 7章の「D1 上で挙動を確認する」の回収）④`updated_at` が UPDATE で更新される／明示値は上書きしない | `db.md` 7章 |
 | **シード**（`seed.test.ts`） | 事前定義種目が**18件**あること、`owner_user_id IS NULL`、カテゴリが8値のいずれか、`other` が0件、**名前に重複がない**こと（`UNIQUE(owner_user_id,name)` は NULL 同士を防げないため。ADR-0011）。`backend.md` 12章の UUID が固定値で存在すること | `backend.md` 12章、ADR-0011 |
 
-- 「テーブル再作成で親行が消えるか」（`project-structure.md` 13章 未解決2）は、再作成を含む migration を実際に書く段階でこの層に回帰テストを足す。**現時点で再作成を伴う migration は存在しないため、設計書上は未解決事項のまま残す**（15章）。
+- 「テーブル再作成で親行が消えるか」は**解決済み**（`project-structure.md` 8.3）。親テーブルの再作成は子行が全件消えるため禁止とした。子テーブルの再作成を含む migration を書く場合は、トリガーの再作成をこの層の回帰テストで確認する（15章 項目 11）。
 
 ### 5.4 ID トークン検証（Small）
 
