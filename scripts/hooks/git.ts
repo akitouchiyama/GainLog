@@ -34,12 +34,28 @@ export function headContent(path: string): string | null {
   }
 }
 
-/** ステージ済みの差分で追加された行（`+` で始まる行。ヘッダは除く） */
-export function stagedAddedLines(path: string): string[] {
-  return git(['diff', '--cached', '-U0', '--no-color', '--', path])
-    .split('\n')
-    .filter((l) => l.startsWith('+') && !l.startsWith('+++'))
-    .map((l) => l.slice(1))
+export type AddedLine = { line: number; text: string }
+
+/** ステージ済みの差分で追加された行と、その行番号（ステージ後のファイル上） */
+export function stagedAddedLines(path: string): AddedLine[] {
+  return parseAddedLines(
+    git(['diff', '--cached', '-U0', '--no-color', '--', path]),
+  )
+}
+
+/** `git diff -U0` の出力から追加行を取り出す */
+export function parseAddedLines(diff: string): AddedLine[] {
+  const result: AddedLine[] = []
+  let next = 0
+  for (const l of diff.split('\n')) {
+    const hunk = /^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@/.exec(l)
+    if (hunk) {
+      next = Number(hunk[1])
+    } else if (l.startsWith('+') && !l.startsWith('+++')) {
+      result.push({ line: next++, text: l.slice(1) })
+    }
+  }
+  return result
 }
 
 /** 違反を表示して終了コード 1 で終える */

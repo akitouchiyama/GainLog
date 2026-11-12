@@ -60,7 +60,7 @@ if (import.meta.main) {
       checkMigration({
         path,
         content: stagedContent(path),
-        addedLines: stagedAddedLines(path),
+        addedLines: stagedAddedLines(path).map((l) => l.text),
       }),
     )
   if (violations.length > 0) {
