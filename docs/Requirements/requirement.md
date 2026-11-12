@@ -117,9 +117,10 @@ GainLog は、日々の筋力トレーニング（種目・重量・回数・セ
 - **Frontend**: TypeScript, React, Vite, TailwindCSS（`@tailwindcss/vite`）, Zod, Vitest, React Router, TanStack Query（`docs/Design/Detailed/frontend.md` 1章、ADR-0015）, `@playwright/test`（E2E。`docs/Design/Detailed/frontend.md` 1章、ADR-0017）
 - **テスト**: Vitest 5, `@cloudflare/vitest-plugin`（API を workerd・ローカル D1 上でテスト）, jsdom, React Testing Library（`@testing-library/react`・`@testing-library/dom`・`@testing-library/user-event`・`@testing-library/jest-dom`）, MSW（`msw`。クライアントの API 差し替え）, カバレッジ（`@vitest/coverage-v8`。`docs/Design/Detailed/test.md` 10.3）（`docs/Design/Detailed/test.md` 1・4章、ADR-0018）。E2E の `@playwright/test` は Frontend に記載
 - **DB**: Cloudflare D1（SQLite 互換）
-- **ビルド・開発・品質管理**: Vite（`@cloudflare/vite-plugin`）, Wrangler, pnpm, ESLint, Prettier, Lefthook, gitleaks
+- **ビルド・開発・品質管理**: Vite（`@cloudflare/vite-plugin`・`@vitejs/plugin-react`）, Wrangler, pnpm, ESLint（`@eslint/js`・`typescript-eslint`・`globals`・`eslint-config-prettier`）, Prettier, Lefthook, gitleaks
 - **コンテナ（ビルド成果物の確認用）**: Podman, podman-compose（Containerfile / Compose Spec）。開発自体はコンテナを使わない（ADR-0012）
 - バリデーションは Zod に統一し、スキーマは `src/shared` で API・UI が共有する（ADR-0008）。詳細な選定・バージョン方針は `docs/Design/Detailed/project-structure.md` 1章。
+- 上記の技術名と npm パッケージ名の対応表（許可リスト）は `scripts/hooks/allowed-packages.json` で管理し、pre-commit で `package.json` の依存と照合する。ライブラリを追加する場合は、本章への追記と許可リストの更新を同じコミットで行う（`docs/Design/Detailed/project-structure.md` 9.4）。
 
 ### デプロイ
 - Cloudflare Workers 上にデプロイし、任意の場所・端末からアクセス可能とする。
