@@ -25,7 +25,7 @@ E2E テスト（Playwright。ADR-0017）は実際の Google ログインを通�
 
 - 本番コード・本番設定にテストのための変更は不要。
 - E2E は各テストが専用のユーザーを作るため、実行順序に依存しない。
-- `__Host-` Cookie が `http://localhost` で受理されるか、`wrangler d1 execute --local` の書き込みが起動中のサーバーから見えるかは未確認で、実装フェーズ最初のタスクで実測する（`test.md` 15章）。成立しない場合は、事前投入や `https` でのローカル起動を検討する。
+- 実装前の技術検証（2026-10-12）で、Chromium 156 が `http://localhost` で `__Host-` Cookie を受理・送信すること、`wrangler d1 execute --local` の書き込みが起動中の `vite preview` から即座に見えることを確認した（`test.md` 15章）。Playwright の `addCookies` は `domain: 'localhost'`・`path: '/'` で注入する（`url` 指定は失敗する。`test.md` 7.2）。
 - 受入条件「実際の Google でログインできる」は自動テストで検証できず、手動確認に依存する。
 
 詳細は `docs/Design/Detailed/test.md` 7.2。

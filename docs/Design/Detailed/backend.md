@@ -153,6 +153,7 @@ src/api/
 ```ts
 // index.ts（方針）
 const app = new OpenAPIHono<AppEnv>()
+const routes = app
   .use('*', requestLogger)
   .use('*', container)          // composition root（4章）
   .use('*', secFetchSite)
@@ -164,13 +165,15 @@ const app = new OpenAPIHono<AppEnv>()
 
 app.onError(errorHandler)
 
-export type AppType = typeof app
+export type AppType = typeof routes
 export default app
 ```
 
-- **テストのための関数化（`test.md` 5.5）**：API 統合テストで外部境界（`IdTokenVerifier`・`GoogleOAuthClient`）だけを差し替えるため、アプリの組み立てを `createApp({ idTokenVerifier, googleOAuthClient })` として関数化する。`export default` は本番の実装を渡した結果とし、`AppType` は `ReturnType<typeof createApp>` とする。上記のチェーン規約は `createApp` 内で守る。
+- **`app`（元のインスタンス）と `routes`（チェーンの戻り値）を分ける**（実装前の技術検証で判明）。`OpenAPIHono` に `.use()`・`.get()`・`.route()` をチェーンすると、戻り値の型は素の `Hono` になり、`getOpenAPI31Document`・`openapi()` などの `OpenAPIHono` のメソッドが型から消える。`.route()` などは元のインスタンスを書き換えるため、実行・`onError`・OpenAPI 仕様の生成（11章）には `app` を使い、RPC の型には `typeof routes` を使う。
+
+- **テストのための関数化（`test.md` 5.5）**：API 統合テストで外部境界（`IdTokenVerifier`・`GoogleOAuthClient`）だけを差し替えるため、アプリの組み立てを `createApp({ idTokenVerifier, googleOAuthClient })` として関数化する。`export default` は本番の実装を渡した結果とし、`AppType` は `createApp` が返す `routes` の型（上記の `app` と `routes` の分離を `createApp` 内で行う）とする。上記のチェーン規約は `createApp` 内で守る。関数化しても client で RPC の型推論が保たれることは、技術検証で確認した。
 - **一次情報での確認結果（`project-structure.md` 未解決12 の一部を回収）**：Hono の RPC 型推論は、ルート定義・`.route()` による結合の**両方でメソッドチェーンが必須**である（チェーンを切って個別の変数に代入すると、その時点で型が失われる）。この制約を踏まえ、各 `*.routes.ts` ファイル内・`index.ts` の結合部分とも、`const` 代入を挟まず1文でチェーンする規約とする。
-- ルート数が増えて型推論（IDE・`tsc -b`）のコストが問題になった場合は、リソース単位で `AppType` を分割し、`client` 側で複数の `hc<T>` を使う方式に切り替える（`project-structure.md` 未解決12 に残る「型推論のコスト」「Workers 型の解決」は実装フェーズ最初のタスクで引き続き検証する）。
+- ルート数が増えて型推論（IDE・`tsc -b`）のコストが問題になった場合は、リソース単位で `AppType` を分割し、`client` 側で複数の `hc<T>` を使う方式に切り替える（`project-structure.md` 未解決12。Workers 型の解決は技術検証で確認済みで、残る「型推論のコスト」はルート数が確定してから計測する）。
 
 ### 3.2 存在しない `/api/*` パスと共通エラーハンドリング
 
@@ -209,6 +212,7 @@ flowchart LR
 - `jwtVerify(token, JWKS, options)` の `options.issuer` は `string | string[]` を受け付ける。
 - Google の ID トークンの `iss` は `https://accounts.google.com`（discovery document 上の正式値）だが、Google 公式ドキュメントは検証時に `https://accounts.google.com` **または** `accounts.google.com` の両方を許容するよう案内している。したがって `issuer: ['https://accounts.google.com', 'accounts.google.com']` を渡す。
 - `aud` はクライアント ID と完全一致で検証する（`audience` オプション）。
+- **実測（実装前の技術検証、2026-10-12、jose 6.2.12）**：`compatibility_flags` を指定しない（`nodejs_compat` なし）本番相当のビルド（`vite preview`）で、RS256 の鍵生成・署名・ローカル JWKS による `jwtVerify`（`issuer`・`audience` の検証を含む）が動作した。`nodejs_compat` は不要と確定する（`project-structure.md` 5.2）。
 
 **JWKS の取得先**：Google の discovery document（`https://accounts.google.com/.well-known/openid-configuration`）を毎回取得せず、そこに記載された安定した `jwks_uri`（`https://www.googleapis.com/oauth2/v3/certs`）を `createRemoteJWKSet` に直接渡す。discovery document 自体の取得は不要とし、Worker 起動のたびの追加往復を避ける。`jwks_uri` が変更された場合はコードの更新が必要になる点を未解決事項に記載する。検証器（`GoogleIdTokenVerifier`）は JWKS の取得元をコンストラクタで受け取れる形にし、本番は `createRemoteJWKSet`、テストはローカル鍵の JWKS を渡す（`test.md` 5.4。本番の挙動は変わらない）。
 
@@ -325,7 +329,28 @@ sequenceDiagram
 ### 7.4 `sql.raw` の禁止・エラー判別
 
 - `infrastructure/repositories/**` 以外での生 SQL 文字列組み立てを禁止する（2.4 の Lint で `drizzle-orm*` 自体を禁止しているため、副次的に担保される）。
-- D1 の制約違反（UNIQUE・RESTRICT）は、Drizzle 経由で投げられるエラーのメッセージ・コードから判別し、リポジトリ層で `ConflictError`（domain）に変換してから上位に投げる。判別の具体的なパターン（エラーコード文字列）は実装フェーズ最初のタスクでローカル D1 に対して実測し、本書または `test.md` に反映する（15章 未解決事項）。
+- D1 の制約違反（UNIQUE・RESTRICT）は、Drizzle 経由で投げられるエラーのメッセージから判別し、リポジトリ層で `ConflictError`（domain）に変換してから上位に投げる。
+
+**判別パターン（実装前の技術検証で実測、2026-10-12。drizzle-orm 0.45.4・ローカル D1）:**
+
+- エラーは 3 層構造で、`code` プロパティは持たない。
+  1. `DrizzleQueryError`（`message` は `Failed query: <SQL>`）
+  2. その `cause`：`message` が `D1_ERROR: <SQLite のメッセージ>: SQLITE_CONSTRAINT (extended: SQLITE_CONSTRAINT_xxx)`
+  3. さらにその `cause`：2 から `D1_ERROR: ` を除いたもの
+- 判別は `cause` の `message` に含まれる文字列で行う。
+
+| 違反 | extended コード | メッセージの例 | 変換先 |
+|---|---|---|---|
+| UNIQUE | `SQLITE_CONSTRAINT_UNIQUE` | `UNIQUE constraint failed: workout_records.user_id, workout_records.workout_date` | `ConflictError` |
+| 主キーの重複 | `SQLITE_CONSTRAINT_PRIMARYKEY` | `UNIQUE constraint failed: users.id`（本文は UNIQUE と同じ形） | 変換しない（3.2 の想定外の例外として 500） |
+| FK RESTRICT（使用中の種目の削除） | **`SQLITE_CONSTRAINT_TRIGGER`** | `FOREIGN KEY constraint failed` | `ConflictError` |
+| FK の参照先なし | `SQLITE_CONSTRAINT_FOREIGNKEY` | `FOREIGN KEY constraint failed` | 変換しない（同上） |
+| CHECK | `SQLITE_CONSTRAINT_CHECK` | `CHECK constraint failed: workout_sets_weight_deci_range`（制約名が入る） | 変換しない（同上） |
+| NOT NULL | `SQLITE_CONSTRAINT_NOTNULL` | `NOT NULL constraint failed: users.email` | 変換しない（同上） |
+
+- **RESTRICT の extended コードは `FOREIGNKEY` ではなく `TRIGGER` になる。** extended コードで判別すると取りこぼすため、RESTRICT は `FOREIGN KEY constraint failed` を含むかで判別する（削除操作で発生した場合に限る）。
+- FK のエラーにはテーブル名・列名が含まれない。1 つの操作で複数の FK に違反しうる場合、どの FK かは区別できない。
+- UNIQUE は対象の列名がメッセージに含まれるため、必要なら「どの UNIQUE か」まで判別できる。主キーの重複と区別するときは extended コード（`UNIQUE` か `PRIMARYKEY` か）を見る。
 
 ## 8. エンドポイント別の処理
 
@@ -464,8 +489,6 @@ openapi.yaml（凍結済みスナップショット）に定義された全エ�
 
 - `src/client` の内部構成（`frontend.md`）
 - テストの配置・ダブル方針・CI 必須化・受入条件との対応表（`test.md`）
-- `compatibility_flags`（`nodejs_compat` の要否）：`jose`・`crypto.subtle` は Workers 標準 API のみで完結するため、現時点では不要と見込むが、実装フェーズ最初のタスクで確定する
-- D1 の制約違反エラーの具体的な判別パターン（エラーメッセージ・コード文字列）：実装フェーズ最初のタスクで実測する
 - Google Cloud Console 側での Authorized redirect URI の登録手順：運用手順書スコープ（`auth.md` 12章）
 - Phase 2 機能
 
@@ -486,9 +509,9 @@ openapi.yaml（凍結済みスナップショット）に定義された全エ�
 
 ## 15. 未解決事項
 
-1. **D1 の制約違反エラーの判別パターン**（UNIQUE・RESTRICT を判別してリポジトリ層で `ConflictError` に変換する具体的な条件）。実装フェーズ最初のタスクでローカル D1 に対して実測する。
-2. **`compatibility_flags`（`nodejs_compat`）の要否**。`jose`・`crypto.subtle` は標準 Web API のみで完結する見込みだが、依存関係の実装詳細（内部で Node.js の `crypto` モジュールにフォールバックしていないか等）を実装時に確認する。
-3. **Hono RPC の型推論コスト・Workers 型の解決**（`project-structure.md` 未解決12 の残り）。ルート数が実装で確定した段階で計測する。
+1. ~~**D1 の制約違反エラーの判別パターン**~~ → **解決済み**（実装前の技術検証、2026-10-12）。7.4 に実測したパターンを記載した。
+2. ~~**`compatibility_flags`（`nodejs_compat`）の要否**~~ → **解決済み**（同上）。`nodejs_compat` なしで jose が動作することを確認し、不要と確定した（5.1、`project-structure.md` 5.2）。
+3. **Hono RPC の型推論コスト**（`project-structure.md` 未解決12 の残り）。ルート数が実装で確定した段階で計測する。Workers 型の解決は技術検証で確認済み（client では `skipLibCheck` で黙認され、RPC の型には影響しない。`project-structure.md` 3.2）。
 4. **セッショントークンの生成方式の詳細**（`crypto.getRandomValues` のバイト長、Base64url エンコードの実装。7.3）。
 5. **Google の `jwks_uri` が将来変更された場合の追随方法**（discovery document を都度取得する方式へ切り替えるか、値をハードコードしたまま運用するか）。
 6. **OpenAPI 仕様の公開**：将来 API を外部公開する必要が生じた場合の認証設計（11章）。

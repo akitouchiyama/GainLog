@@ -10,7 +10,7 @@
 
 - DBエンジンは Cloudflare D1（SQLite 互換）であり、ORM・マイグレーションツールとして Drizzle ORM / drizzle-kit を用いる（architecture.md 7章）。
 - 本書のスコープは要件定義書4章で定義された Phase 1 の範囲、すなわち `users` / `sessions` / `allowlist` / `exercises` / `workout_records` / `workout_sets` の6テーブルとする。Phase 2 で追加予定の `menus` 等は本書のスコープ外とする（9章参照）。
-- 外部キー制約は D1 上で常に有効であることを前提として設計する。D1 は素の SQLite と異なり外部キー制約をデフォルトで強制し、クエリやマイグレーションの実行中に `PRAGMA foreign_keys = OFF` へ変更することはできない（D1 は各クエリを暗黙のトランザクションで実行するため）。制約を一時的に違反する必要がある場合（複雑なデータ移行等）は `PRAGMA defer_foreign_keys = ON` でトランザクション終端まで検証を遅延させる。
+- 外部キー制約は D1 上で常に有効であることを前提として設計する。D1 は素の SQLite と異なり外部キー制約をデフォルトで強制し、クエリやマイグレーションの実行中に `PRAGMA foreign_keys = OFF` へ変更することはできない（D1 は各クエリを暗黙のトランザクションで実行するため）。制約を一時的に違反する必要がある場合（複雑なデータ移行等）は `PRAGMA defer_foreign_keys = ON` でトランザクション終端まで検証を遅延させる。ただし `defer_foreign_keys` が遅らせるのは制約の検証だけで、`ON DELETE CASCADE` の動作は止めない。親テーブルを `DROP TABLE` すると子行が全件削除されることを実測で確認しており、親テーブルの再作成は禁止としている（`docs/Design/Detailed/project-structure.md` 8.3）。
 - 本書は基本設計（外部設計）レベルのドキュメントであり、リポジトリ層のディレクトリ構成・migrationファイルの具体的配置・Drizzle ORMの実装コードは対象外とする（9章参照）。
 
 ## 2. 命名規則・型設計方針
@@ -297,7 +297,7 @@ END;
 ```
 
 - `updated_at` 自動更新トリガーは `WHEN NEW.updated_at = OLD.updated_at` により、アプリケーション側が明示的に別の値を渡した場合は上書きしない（無限ループ防止・意図的な値指定を許容する）設計である。
-- `trg_workout_records_auto_delete` は、日単位削除（`workout_records` の直接DELETE）によりFKのCASCADEで `workout_sets` が削除された際にも誘発され、既に削除処理中の親行に対して冗長なDELETEを試みる（実害はないが、実装時にD1上で挙動を確認する。10章 未解決事項1も参照）。
+- `trg_workout_records_auto_delete` は、日単位削除（`workout_records` の直接DELETE）によりFKのCASCADEで `workout_sets` が削除された際にも誘発され、既に削除処理中の親行に対して冗長なDELETEを試みる。実装前の技術検証（2026-10-12、ローカル D1）で、この冗長な DELETE がエラーにならず、日単位削除が正常に完了することを確認した。
 - セット単位・種目単位の削除（一部の `workout_sets` のみ削除）の場合は、削除後に残存セットが0件であることを検知して `workout_records` を削除する、本来の意図通りの動作となる。
 
 ## 8. インデックス方針
@@ -374,5 +374,5 @@ WHERE wr.user_id = :userId
 
 ### 未解決事項
 
-1. **ユーザー削除時の CASCADE / RESTRICT の相互作用（Phase 2 で確定）**：ユーザー削除は Phase 1 のスコープ外とする（9章「スコープ外」参照）。Phase 2 で実装する際、`users` の削除は `workout_records`（CASCADE）→ 配下の `workout_sets`（CASCADE）を削除する一方、同じユーザーの `exercises`（`owner_user_id` の CASCADE）も削除対象となる。D1（SQLite）が単一の親 DELETE から複数の子テーブルへの CASCADE をどの順序で処理するかは厳密に規定されておらず、`exercises` が先に削除されると `workout_sets.exercise_id` の即時評価 `ON DELETE RESTRICT` に抵触してユーザー削除自体が失敗しうる（`PRAGMA defer_foreign_keys` は即時評価の RESTRICT を遅延できない）。そのため Phase 2 では、ユーザー削除をアプリケーション層で `workout_sets → workout_records → exercises` の明示的な順序で削除するトランザクションとして実装し、D1 上で回帰テストする。7章のトリガーの多重発火・冗長 DELETE の実挙動もこの時点で併せて検証する。
+1. **ユーザー削除時の CASCADE / RESTRICT の相互作用（Phase 2 で確定）**：ユーザー削除は Phase 1 のスコープ外とする（9章「スコープ外」参照）。Phase 2 で実装する際、`users` の削除は `workout_records`（CASCADE）→ 配下の `workout_sets`（CASCADE）を削除する一方、同じユーザーの `exercises`（`owner_user_id` の CASCADE）も削除対象となる。D1（SQLite）が単一の親 DELETE から複数の子テーブルへの CASCADE をどの順序で処理するかは厳密に規定されておらず、`exercises` が先に削除されると `workout_sets.exercise_id` の即時評価 `ON DELETE RESTRICT` に抵触してユーザー削除自体が失敗しうる（`PRAGMA defer_foreign_keys` は即時評価の RESTRICT を遅延できない）。そのため Phase 2 では、ユーザー削除をアプリケーション層で `workout_sets → workout_records → exercises` の明示的な順序で削除するトランザクションとして実装し、D1 上で回帰テストする。7章のトリガーの多重発火もこの時点で併せて検証する（日単位削除での冗長 DELETE が無害であることは確認済み。7章）。
 2. **トリガーDDLのマイグレーション統合方法（確定済み）**：`docs/Design/Detailed/project-structure.md` 8.3 で確定した。`drizzle-kit generate --custom` で作成した空のSQLに追記型で管理し、以降の再生成で上書きされない。drizzle-kit が生成するテーブル再作成SQL（`DROP TABLE`）ではトリガーが消えるため、再作成を含む migration では末尾でトリガーを再作成する規約とする（ADR-0011）。

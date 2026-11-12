@@ -38,4 +38,4 @@
 - Alpine は workerd が非対応のため使えない。
 - `requirement.md` 6章に Podman・podman-compose を追記する（npm 依存ではないため 9.4 の許可リストの対象外）。
 - `vite preview` の origin も OAuth の redirect URI として登録が必要になる。
-- 未確認事項（`vite preview` による `.dev.vars` の読み込み、rootless Podman の警告の影響、CI ランナーでの Podman の利用可否）は実装フェーズ最初のタスクで確認する。
+- 未確認事項は実装前の技術検証（2026-10-12）で確認した。`vite preview` はビルド時に生成される `dist/gainlog/.dev.vars` を読むため、`.dev.vars` はそこへ読み取り専用でマウントする。rootless Podman の警告は出ず影響はなかった。GitHub Actions の `ubuntu-24.04` ランナーには Podman 4.9.3 が導入されている（実地確認は CI の構築時）。ホストに `.dev.vars` がないと Podman が空のディレクトリを作るため、起動前に存在を確認する（`project-structure.md` 6.4）。
