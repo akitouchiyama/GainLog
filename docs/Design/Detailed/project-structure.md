@@ -39,9 +39,9 @@
 | バリデーション | Zod | 4.6.5 | Valibot は採用しない（4章）。単一インスタンスを確認（4.2） |
 | ORM | Drizzle ORM / drizzle-kit | **0.45.4 / 0.31.11（安定版）** | 1.0 は rc のため採用しない |
 | 言語 | TypeScript | **6.0.3（固定）** | 7 系は周辺ツールとの相性が未確認のため採用しない |
-| Lint / Format | ESLint（flat config）＋ typescript-eslint、Prettier | – | 品質ゲートの導入時に版を確定する |
-| Git フック | Lefthook | – | 同上 |
-| シークレット検出 | gitleaks | – | pre-commit と CI |
+| Lint / Format | ESLint（flat config）＋ typescript-eslint、Prettier | ESLint 10.14.0・`@eslint/js` 10.0.1・typescript-eslint 8.72.2・globals 17.14.0・eslint-config-prettier 10.1.8、Prettier **3.9.10（固定）** | 品質ゲートの導入時（2026-11-12）に導入。Prettier は版によって整形結果が変わるため固定する（3.10.x は公開直後のため見送り） |
+| Git フック | Lefthook | 2.2.2 | `prepare` script の `lefthook install` でフックを入れる（10章） |
+| シークレット検出 | gitleaks | 開発機で 8.21.2 を確認 | npm 依存ではないバイナリ。pre-commit と CI。開発機への導入手順は `CONTRIBUTING.md` |
 | パッケージマネージャ | pnpm | 12.11.2（`packageManager` で固定） | 依存のビルドスクリプトの許可が必要（10章） |
 | コンテナ | Podman ＋ podman-compose（Containerfile / Compose Spec） | 開発機で Podman 4.9.3・podman-compose 1.0.6 を確認 | npm 依存ではない。ビルド成果物の確認用（6.4） |
 
@@ -63,7 +63,8 @@ GainLog/
 │   └── shared/               # api / client 共有コード（4章）
 ├── migrations/               # drizzle-kit の生成先 ＝ Wrangler の migrations_dir（8章）
 ├── scripts/
-│   └── hooks/                # Git フックから呼ぶ決定論チェック（Node 標準のみ。9章）
+│   └── hooks/                # Git フックから呼ぶ決定論チェック（Node 標準のみ。TypeScript を Node で直接実行。9章）
+│       └── allowed-packages.json  # 要件整合性チェックの許可リスト（9.4）
 ├── docs/                     # 要件・設計書・ADR
 ├── .github/workflows/        # CI/CD（9章。実体は CI の構築時に作成）
 ├── public/
@@ -76,8 +77,10 @@ GainLog/
 ├── e2e/                      # Playwright の E2E テストと補助（`test.md` 7章）
 ├── drizzle.config.ts         # drizzle-kit の設定（8章）
 ├── eslint.config.js          # ESLint flat config（3章）
+├── .prettierrc.json / .prettierignore  # Prettier の設定と対象外（docs/・*.md・生成物。9.2）
 ├── tsconfig.json             # references のみ（3章）
 ├── tsconfig.api.json / tsconfig.client.json / tsconfig.shared.json
+├── tsconfig.node.json        # 設定ファイルと scripts/ の型チェック（3.2）
 ├── lefthook.yml              # Git フック定義（9章）
 ├── Containerfile             # ビルド成果物確認用のイメージ定義（6.4）
 ├── compose.yaml              # 同上の起動定義（Compose Spec。6.4）
@@ -152,8 +155,8 @@ flowchart LR
    実装前の技術検証（2026-10-12）で次を確認・確定した。
    - **`tsconfig.client.json` は `references` に `tsconfig.api.json` を含める。** client が `src/api/index.ts` の `AppType` を `import type` する（3.1 の例外）ため、参照しないと TS6307（プロジェクト外のファイル）で失敗する。参照すると、api の型は宣言ファイル経由で client に渡る。
    - **client では `Cloudflare.Env` などの Workers 型は未解決のまま、`skipLibCheck: true` によって黙認される**（`skipLibCheck: false` にすると `Cannot find namespace 'Cloudflare'` になることを確認）。RPC が使うパス・入力・レスポンスの型には影響しない（存在しないフィールドや不正な値が型エラーになることを確認）。client に Workers 型を持ち込まずに分離を保つため、この状態を受け入れる。
-   - **`tsconfig.api.json` の `types` には、テスト用の型 `@cloudflare/vitest-plugin/types`（`cloudflare:test`）も含める**（`test.md` 15章 7 の回答）。tsconfig は分割しない。その代わり、本番コードからの `cloudflare:test` の import は ESLint で禁止する（品質ゲートの導入時に設定する）。
-   - `vite.config.ts`・`vitest.config.ts`・`drizzle.config.ts` などの設定ファイルは、上の 3 つのどの tsconfig にも含まれず、型チェックの対象外である。扱いは品質ゲートの導入時に決める（13章 未解決）。
+   - **`tsconfig.api.json` の `types` には、テスト用の型 `@cloudflare/vitest-plugin/types`（`cloudflare:test`）も含める**（`test.md` 15章 7 の回答）。tsconfig は分割しない。その代わり、本番コードからの `cloudflare:test` の import は ESLint で禁止する（`eslint.config.js` で設定済み）。
+   - **設定ファイル（`vite.config.ts`・`vitest.config.ts`・`drizzle.config.ts`・`eslint.config.js`）と `scripts/**` は、4 つ目の `tsconfig.node.json`（Node の型、`module: nodenext`）で型チェックする**（品質ゲートの導入時に確定。13章 15）。`scripts/` は Node 24 の型ストリップで `.ts` を直接実行するため、`erasableSyntaxOnly` を有効にする。`eslint.config.js` は `checkJs` で JSDoc の型を検査する。
 2. **ESLint の `no-restricted-imports` をディレクトリ別に設定する**（import 方向の禁止）
 
    | 対象ファイル | 禁止する import |
@@ -166,7 +169,11 @@ flowchart LR
 
    client の例外（3.1）は、`@typescript-eslint/no-restricted-imports` の `allowTypeImports` を `src/api/index.ts` のパスに限って有効にして実現する。値としての import（`import { app }` 等）は引き続き禁止される。
    表の最後の行が `auth.md` 13章の「ハンドラから直接 Drizzle を呼ぶことを禁止する Lint」に相当する（`backend.md` 2.4 で「`infrastructure/**` 以外での `drizzle-orm*` 禁止」として具体化）。**現時点では専用のカスタム ESLint ルールは作らず、`no-restricted-imports` で足りる**という方針とする。実装中に静的に検出したい規約が出てきた場合は、flat config にローカルルール（リポジトリ内のプラグイン）として追加してよい。追加の依存は不要だが、外部の `eslint-plugin-*` を導入する場合は `requirement.md` 6章への追記と 9.4 の許可リストの更新が必要になる。ただし「WHERE 句の中身が正しいか」は静的解析では保証できず、最終防御線は統合テスト（`test.md` 5.5・5.6）である（`auth.md` 13章の留意と同じ）。なお、テストコード（`*.test.ts(x)`・`testing/**`）には api 内部の層ルールのみ緩和を適用し、`api ⇄ client` の禁止と `shared` の純粋性は維持する。本番コードから `**/testing/**` の import は禁止する（`test.md` 9.2）。
-   ルールが実際に違反を検出することは、品質ゲートの導入時に、違反コードを一時的に書いて確認する。
+   **実装（品質ゲートの導入時に確定）:**
+   - 基本のルールセットは typescript-eslint の `recommendedTypeChecked`（型情報あり。`no-floating-promises` などで await 忘れを検出する）＋ `eslint-config-prettier`。
+   - flat config では、同じルールを後の設定で指定すると前の指定が丸ごと置き換わる。そこで、対象パスごとに適用される禁止をすべて並べたリストを作り、本番コード用とテストコード用の設定を対で生成する。
+   - 領域・層をまたぐ import は、相対 import の形（`../` の連続の直後にディレクトリ名。例：`^(\.\./)+api/`）を正規表現で判定する。`**/api/**` のような glob では、client の `lib/api.ts` への import を api への import と誤認するため。**`@shared` 以外のパスエイリアスを追加する場合は、このルールの見直しが必要**。
+   - 違反コードを一時的に書き、各ルールの検出と許可の両方を 88 パターンで確認した。
 
 ### 3.3 パスエイリアス
 
@@ -459,14 +466,14 @@ PRAGMA foreign_keys=ON;
 
 ## 9. 品質ゲート・ツールチェーン方針（ADR-0010）
 
-設計判断のみを本書で定める。ツールの実際の導入・設定は品質ゲート・CI の導入時（実装前作業）に行う。
+設計判断を本書で定める。pre-commit は実装前作業の品質ゲート導入（2026-11-12）で導入済みで、定義は `lefthook.yml`。CI（9.5）は CI の構築時に導入する。
 
 ### 9.1 全体像
 
 | ゲート | タイミング | 実行主体 | 性質 | 役割 |
 |---|---|---|---|---|
 | pre-commit | `git commit` | Lefthook | 決定論的・ブロッキング・LLM なし | 機密・禁止ファイルの混入防止、lint・format・型、関連テスト、要件整合性、migration 再作成ガード |
-| pre-push | `git push` | Lefthook ＋ `claude -p` | LLM レビュー・**Blocker 指摘のみブロック** | コーディング規約・セキュリティのレビュー |
+| pre-push | `git push` | Lefthook ＋ `claude -p` | LLM レビュー・**Blocker 指摘のみブロック** | コーディング規約・セキュリティのレビュー（**未導入**。9.3） |
 | CI（PR） | PR 作成・更新 | GitHub Actions | 決定論的・ブロッキング | gitleaks を先頭で実行し、通過後に lint・型・テスト・ビルド |
 | CI/CD（main） | `main` へのマージ | GitHub Actions | 決定論的 | テスト → ビルド → マイグレーション → デプロイ（6.2） |
 
@@ -476,12 +483,16 @@ PRAGMA foreign_keys=ON;
 
 | チェック | 内容 |
 |---|---|
-| シークレット検出 | gitleaks で staged の差分を検査 |
-| 禁止ファイルガード | `.env*`、`.dev.vars`、`*.pem`、`.wrangler/`（`state` を含むローカル D1）、大容量ファイルの追加を拒否。`.gitignore` との二重防御 |
-| lint・format・型 | ESLint、Prettier（`--check`）、`tsc -b`。staged のファイルを対象にする |
-| 関連テスト | `vitest related --run <staged のソース/テストファイル>`（`test.md` 4.4・2.2）。変更ファイルから依存をたどった関連テストだけを実行し、Red（失敗するテスト）の誤コミットを止める。E2E は対象外。全件は CI の責務で、依存をたどれない変更（設定ファイル・migration 等）の拾い漏れは CI が最終防御線となる。実行時間・拾い漏れは実測して見直す（`test.md` 15章 未解決13） |
+| シークレット検出 | gitleaks で staged の差分を検査（`gitleaks git --staged --redact`）。gitleaks が見つからなければ失敗させる |
+| 禁止ファイルガード | `.env*`、`.dev.vars`・`.dev.vars.<env>`（`.dev.vars.example` は許可）、秘密鍵類（`*.pem`・`*.key`・`*.p12`・`*.pfx`）、`.wrangler/` 配下（`state` を含むローカル D1）、1MB を超えるファイルを拒否する（追加・変更とも）。`.gitignore` との二重防御 |
+| lint・format・型 | ESLint・Prettier（`--check`。自動修正はしない）は staged のファイルを対象にする。型チェックは `pnpm typecheck`（`tsc -b` で全体） |
+| 関連テスト | `vitest related --run <staged のソース/テストファイル>`（`test.md` 4.4・2.2）。変更ファイルから依存をたどった関連テストだけを実行し、Red（失敗するテスト）の誤コミットを止める。E2E は対象外。全件は CI の責務で、依存をたどれない変更（設定ファイル・migration 等）の拾い漏れは CI が最終防御線となる。実測では shared・client・api（workerd）の 3 領域をまとめて変更しても約 5.7 秒（`test.md` 15章 13）。**`vitest related --run -- <files>` のように `--` を付けるとファイル指定が無視され、`passWithNoTests` により 1 件も実行せずに成功する**ため、`--` は付けない |
 | migration 再作成ガード | `migrations/*.sql` の差分に `__new_` または `DROP TABLE` を含む場合、SQL 先頭に `-- reviewed-rebuild: <理由>` のコメントがなければ失敗させる。ただし**親テーブル（`users` / `exercises` / `workout_records`）の `DROP TABLE` は、コメントがあっても失敗させる**（子行が全件消えるため。8.3） |
 | 要件整合性チェック | 9.4 |
+
+- 実装は `lefthook.yml` の pre-commit（各チェックを並列に実行し、成功したジョブの出力は表示しない）。各チェックの判定ロジックは `scripts/hooks/*.ts` の純粋関数とし、Vitest の `scripts` プロジェクトでテストする（`test.md` 4.1）。git の読み取りは `scripts/hooks/git.ts` に分ける。
+- **制約**：ESLint・Prettier・型チェック・関連テストは、ステージした内容ではなく**作業ツリーの内容**を検査する（型チェックは作業ツリー全体）。`git add -p` で一部だけステージすると、検査した中身とコミットする中身がずれうる。ステージ以外を一時退避して検査する方式は、退避・復元に失敗したときに作業中の変更を失うおそれがあるため採らず、見逃しは CI（全件）で拾う。ステージしていない作業中のエラーでコミットが止まることはある（安全側）。
+- 品質ゲートの導入時に、上の各チェックが違反を実際に止めることを、本物の `git commit` で確認した。
 
 ### 9.3 pre-push（LLM レビュー）
 
@@ -490,12 +501,13 @@ PRAGMA foreign_keys=ON;
 - 対象は `src/**`・`migrations/**`・`.github/workflows/**`・`wrangler.jsonc` などの変更を含む push とし、ドキュメントのみの push は実行しない。
 - `claude` コマンドの不在・API の失敗・タイムアウト時は、警告を表示して push を通す（フェイルオープン）。可用性の問題で開発を止めないため。
 - レビューのプロンプト・出力形式・入力とする文書（CLAUDE.md・設計書）は実装フェーズで確定する。
+- **品質ゲートの導入時点では未導入**。レビュー/セキュリティエージェント・Skills の整備と合わせて導入し、その際に ADR-0010 と本節を見直す。
 
 ### 9.4 要件整合性チェック（`project-requirement-hook-deferred` の確定）
 
 Git 純正の pre-commit の一部として、LLM を呼ばないルールベースのチェックを行う（`scripts/hooks/` の Node スクリプト）。
 
-**対象の判定方式は許可リスト方式**とする（提案。下記の代替と比較）。
+**対象の判定方式は許可リスト方式**とする（下記の代替と比較）。
 
 | 方式 | 内容 | トレードオフ |
 |---|---|---|
@@ -504,10 +516,10 @@ Git 純正の pre-commit の一部として、LLM を呼ばないルールベー
 
 | チェック | 内容 | 違反時 |
 |---|---|---|
-| 非目標キーワード | `requirement.md` 9章に対応するキーワード（`lb`／ポンド、SNS、ネイティブアプリ、SAML、SSO 等）の追加行を、`src/**` と `migrations/**` の差分から検出 | ブロック。誤検知は行末コメント `// requirement-check: ignore <理由>` で除外する |
-| 技術スタック逸脱 | `package.json` に追加された依存が、リポジトリで管理する許可リスト（パッケージ名の一覧）にない場合に検出。許可リストの変更を含むコミットでは、同じコミットに `requirement.md` 6章の変更が含まれていることを要求する | ブロック |
+| 非目標キーワード | `requirement.md` 9章に対応するキーワード（`lb`／ポンド、SNS、ネイティブアプリ、iOS、Android、SAML、SSO）の追加行を、`src/**` と `migrations/**` の差分から検出。英字のキーワードは、前後が英字でない場合と camelCase の区切り（`weightLb`・`isAndroid`）のときだけ一致させ、`album`・`lasso` のような部分一致は拾わない。6章の対応ブラウザである「iOS Safari」「Android Chrome」は除外する | ブロック。誤検知は行末コメント `// requirement-check: ignore <理由>` で除外する |
+| 技術スタック逸脱 | `package.json` の依存（`dependencies`・`devDependencies`・`optionalDependencies`・`peerDependencies`）を許可リスト（`scripts/hooks/allowed-packages.json`）と照合し、ないものを検出する。追加された依存だけでなく全件を照合する（許可リストから消した依存も拾うため）。許可リストの変更を含むコミットでは、同じコミットに `requirement.md` 6章の変更が含まれていることを要求する | ブロック |
 
-- 「6章に書いていないライブラリを追加してはならない」という CLAUDE.md の合意ルールを、機械的に担保するための仕組みである。許可リストは 6章の技術名（Hono → `hono` など）とパッケージ名の対応表になる。
+- 「6章に書いていないライブラリを追加してはならない」という CLAUDE.md の合意ルールを、機械的に担保するための仕組みである。許可リストは 6章の技術名（Hono → `hono` など）とパッケージ名の対応表で、`scripts/hooks/allowed-packages.json` に置く（13章 10）。
 - 誤検知への運用は `--no-verify` ではなく、上記の行単位の除外コメントまたは許可リスト（＋6章）の更新とする。
 
 ### 9.5 CI（GitHub Actions）
@@ -525,7 +537,7 @@ Git 純正の pre-commit の一部として、LLM を呼ばないルールベー
 | 項目 | 内容 |
 |---|---|
 | パッケージマネージャ | pnpm。依存を厳格に解決し、宣言していない依存の参照を防ぐ（3章の依存方向ルールと相性がよい） |
-| 依存のビルドスクリプト | pnpm 12 は依存の `postinstall` 等を既定でブロックする。`pnpm-workspace.yaml` の `allowBuilds` に、必要なもの（`esbuild`・`workerd`。いずれもネイティブバイナリの配置）だけを許可として記載し、Git 管理する。依存を追加して新たにブロックされた場合は、内容を確認してから許可を追加する |
+| 依存のビルドスクリプト | pnpm 12 は依存の `postinstall` 等を既定でブロックする。`pnpm-workspace.yaml` の `allowBuilds` に、必要なもの（`esbuild`・`workerd`。いずれもネイティブバイナリの配置）だけを許可として記載し、Git 管理する。依存を追加して新たにブロックされた場合は、内容を確認してから許可を追加する。pnpm 12 は、許可も拒否も書かれていないビルドスクリプトがあると `pnpm add` がエラーになる。lefthook の postinstall（`lefthook install` を呼ぶだけ）は `false` と明示して許可せず、フックは `prepare` script で入れる |
 | 新しい版の採用待ち | pnpm は公開直後の版をすぐには採用しない（技術検証時、公開から 1 日未満の zod 4.6.6 ではなく 4.6.5 が選ばれた）。既定の設定によるものと推測しており、設定値は未確認 |
 | バージョン固定 | `package.json` の `packageManager` と `engines.node`（`>=24.22.3`。Wrangler が Node 22 以上、Vite が `^20.19 \|\| >=22.12` を要求することに加え、2026-11-11 のセキュリティリリース（High 7件を含む。HTTP/2・TLS の脆弱性修正）を下限とする。2026-10-21 のセキュリティリリース（eMudhra 中間 CA 侵害に対応する ca-certs 更新を含む）の修正も包含する）。`.nvmrc` で開発環境と CI を揃える |
 | ロックファイル | `pnpm-lock.yaml` をコミットし、CI は `--frozen-lockfile` |
@@ -537,11 +549,12 @@ Git 純正の pre-commit の一部として、LLM を呼ばないルールベー
 | `build` | `vite build`（6.2） |
 | `preview` | `vite preview`（ビルド成果物を workerd で確認） |
 | `typecheck` | `wrangler types --env-file .dev.vars.example` → `tsc -b`（7章。`postinstall` も同じ `wrangler types` を実行する） |
-| `lint` / `format` / `format:check` | ESLint / Prettier |
+| `lint` / `format` / `format:check` | `eslint .` / `prettier --write .` / `prettier --check .` |
 | `test` | `vitest run`（全 projects。`test.md` 4.4） |
 | `test:watch` / `test:coverage` | `vitest` / `vitest run --coverage`（`test.md` 4.4・10.3） |
 | `db:generate` / `db:migrate:local` / `db:reset:local` | 8.2 |
 | `e2e` | `frontend.md` 12.3 章で確定（Playwright、ADR-0017） |
+| `prepare` | `lefthook install`（`pnpm install` 時に Git フックを入れる。9.2） |
 | `container:up` / `container:down` | `.dev.vars` の存在確認 → `podman-compose up --build` / `podman-compose down`（6.4） |
 
 - 本番デプロイ用の script は設けない。正規経路は CI のみとする（`architecture.md` 6章。ローカルからの `wrangler deploy` は動作確認用途で常用しない）。
@@ -585,9 +598,9 @@ Git 純正の pre-commit の一部として、LLM を呼ばないルールベー
 7. ~~**`compatibility_date`・`compatibility_flags`（`nodejs_compat`）**~~ → **解決済み**（同上）。`nodejs_compat` は不要で `compatibility_flags` は指定しない。`compatibility_date` は初期化時の日付とし、初回デプロイの前に見直す（5.2）。
 8. **drizzle-kit 1.0 の GA 後の移行**（マイグレーションの配置形式が変わる。8.1）。
 9. **pre-push の LLM レビュー**のプロンプト・出力形式・所要時間とコストの実測（実装フェーズ）。
-10. **要件整合性チェックの許可リスト**の初期内容（6章の技術名とパッケージ名の対応表）。
+10. ~~**要件整合性チェックの許可リスト**の初期内容~~ → **解決済み**（品質ゲートの導入時、2026-11-12）。`scripts/hooks/allowed-packages.json` に作成し、`requirement.md` 6章に ESLint 関連と `@vitejs/plugin-react` を追記した（9.4）。
 11. ~~**shared の素の Zod スキーマを `@hono/zod-openapi` の `createRoute` に渡せるか**~~ → **解決済み**（同上）。型・実行時の検証とも成立し、OpenAPI 仕様の生成もできる（4.2）。
 12. **Hono RPC の成立性**（4.5）：技術検証で成立を確認した（`createApp` の関数化を含む。Workers 型は client で未解決のまま `skipLibCheck` で黙認されるが、RPC の型には影響しない。3.2）。**残るのはルート数が確定してからの型推論のコストの計測**のみ。
 13. ~~**コンテナでのビルド成果物確認**~~ → **解決済み**（同上）。`vite preview` の `.dev.vars` の読み込み先、rootless Podman の警告の影響なし、GitHub Actions のランナーの Podman 4.9.3（一次情報）を確認した（6.4・9.5）。ランナーでの実地確認は CI の構築時に行う。
 14. `backend.md`・`frontend.md`・`test.md` へ引き継ぐ事項：リポジトリ層の内部構成と `userId` の必須化・種目シードの内容・OpenAPI 仕様の生成経路は `backend.md` で確定済み。RPC クライアントのラッパと共通エラーの扱いは `frontend.md` 4章で確定済み。統合テストの配置と CI での必須化・トリガー存在テスト・CHECK 制約の突合テスト・事前定義種目がある前提のテストデータは `test.md`（5・9・10章）で確定済み。
-15. **設定ファイル（`vite.config.ts`・`vitest.config.ts`・`drizzle.config.ts` 等）の型チェック**：現在の tsconfig 3 分割のどれにも含まれず、型チェックの対象外になっている（3.2）。品質ゲートの導入時に、専用の tsconfig を足すか等を決める。
+15. ~~**設定ファイル（`vite.config.ts`・`vitest.config.ts`・`drizzle.config.ts` 等）の型チェック**~~ → **解決済み**（品質ゲートの導入時、2026-11-12）。`tsconfig.node.json` を追加して `tsc -b` の対象にした（3.2）。
