@@ -1,7 +1,6 @@
 // 要件整合性チェック（project-structure.md 9.4）。LLM を使わないルールベースの検査。
 // - 非目標キーワード（requirement.md 9章）：src/・migrations/ の追加行から検出
 // - 技術スタック逸脱（requirement.md 6章）：package.json の依存を許可リストと照合
-import { readFileSync } from 'node:fs'
 import {
   fail,
   stagedAddedLines,
@@ -127,9 +126,9 @@ if (import.meta.main) {
   }
 
   if (paths.includes('package.json') || paths.includes(ALLOWLIST_PATH)) {
-    const allowlistJson = paths.includes(ALLOWLIST_PATH)
-      ? stagedContent(ALLOWLIST_PATH)
-      : readFileSync(ALLOWLIST_PATH, 'utf8')
+    // 作業ツリーではなくインデックスから読む。ステージしていない許可リストの追加で
+    // 依存の追加が通ってしまわないようにするため
+    const allowlistJson = stagedContent(ALLOWLIST_PATH)
     const allow = allowedPackages(JSON.parse(allowlistJson) as Allowlist)
     for (const name of findDisallowedDependencies(
       stagedContent('package.json'),
