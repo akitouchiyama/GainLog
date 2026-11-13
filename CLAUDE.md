@@ -6,7 +6,7 @@ GainLog プロジェクトの作業を行う際の共通コンテキスト。個
 
 GainLog は、日々の筋力トレーニング（種目・重量・回数・セット）を記録し、種目別の自己ベストを自動表示して成長を実感できる個人向け Web アプリケーション。実質的に単一ユーザー・低トラフィックの利用を想定する。
 
-- 現在のフェーズ: **実装準備**（基本設計・詳細設計は完了し main にマージ済み。プロジェクトの初期化と実装前の技術検証も完了（PR #17・#18）。機能コードは未実装で、品質ゲートを導入中）
+- 現在のフェーズ: **実装準備**（基本設計・詳細設計は完了し main にマージ済み。プロジェクトの初期化と実装前の技術検証も完了（PR #17・#18）。品質ゲート（pre-commit）も導入済み。機能コードは未実装）
 - Phase 1（MVP）の範囲のみを対象とする。Phase 2 機能は設計・実装しない。
 
 ## ドキュメント地図
@@ -49,7 +49,11 @@ GainLog は、日々の筋力トレーニング（種目・重量・回数・セ
 - 実装は **t-wada 流の TDD**（テストファースト / Red-Green-Refactor / TODO リスト駆動 / 三角測量）で進める。詳細は `docs/Design/Detailed/test.md`。適用範囲（振る舞いが変わらない軽微な修正は TDD 不要）は同 2.4。
 - ディレクトリ構成は単一パッケージ（`src/api` / `src/client` / `src/shared`）を前提とする。詳細（Worker エントリポイントの配置を含む）は `docs/Design/Detailed/project-structure.md`。
 - 詳細設計フェーズでは、設計書を1本ずつブランチを切って作成し PR を出した（完了）。
-- コミット・push 前の検査（pre-commit: gitleaks・禁止ファイルガード・lint・型・関連テスト・要件整合性・migration 再作成ガード、pre-push: LLM レビュー）の方針は `docs/Design/Detailed/project-structure.md` 9章で定めた。pre-commit の各ツールは導入作業中（実装前作業の品質ゲート導入）で、**まだ有効になっていない**。pre-push の LLM レビューは、レビュー/セキュリティエージェントの整備と合わせて後で導入する。
+- コミット前の検査（pre-commit。方針は `docs/Design/Detailed/project-structure.md` 9章）は Lefthook で自動実行される（定義は `lefthook.yml`）。`pnpm install` 時に `prepare` script でフックが入る。gitleaks はバイナリを別途導入しておく（ないとコミットが止まる）。
+  - 実行するもの：gitleaks、禁止ファイルガード、migration 再作成ガード、要件整合性チェック（`scripts/hooks/`）、ESLint・Prettier（`--check`。自動修正はしない）、型チェック（`pnpm typecheck`）、関連テスト（`vitest related`）。どれか1つでも失敗するとコミットが止まる。
+  - 止まったら、表示された理由を直してからコミットし直す。`--no-verify` での回避はしない。要件整合性の誤検知は行末の `requirement-check: ignore <理由>` で除外する。依存を追加するときは `requirement.md` 6章と許可リスト（`scripts/hooks/allowed-packages.json`）を同じコミットで更新する。
+  - 検査は作業ツリーの内容に対して行われる（`git add -p` で一部だけステージすると、検査した中身とコミットする中身がずれうる）。
+  - pre-push の LLM レビューは未導入。レビュー/セキュリティエージェントの整備と合わせて後で導入する。
 - マイグレーションは `drizzle-kit generate` で生成する。drizzle-kit がテーブル再作成 SQL（`__new_` / `DROP TABLE`）を生成した場合、トリガー消失や CASCADE のリスクがあるため、`project-structure.md` 8.3 の規約に従う（検出は同 9.2）。
 
 ## Git
