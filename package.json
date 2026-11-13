@@ -19,7 +19,7 @@
     "test:coverage": "vitest run --coverage",
     "test:related": "vitest related --run",
     "postinstall": "wrangler types --env-file .dev.vars.example",
-    "prepare": "lefthook install",
+    "prepare": "if git rev-parse --git-dir >/dev/null 2>&1; then lefthook install; fi",
     "db:generate": "drizzle-kit generate",
     "db:migrate:local": "wrangler d1 migrations apply gainlog --local",
     "db:reset:local": "rm -rf .wrangler/state && pnpm db:migrate:local",

@@ -554,7 +554,7 @@ Git 純正の pre-commit の一部として、LLM を呼ばないルールベー
 | `test:watch` / `test:coverage` | `vitest` / `vitest run --coverage`（`test.md` 4.4・10.3） |
 | `db:generate` / `db:migrate:local` / `db:reset:local` | 8.2 |
 | `e2e` | `frontend.md` 12.3 章で確定（Playwright、ADR-0017） |
-| `prepare` | `lefthook install`（`pnpm install` 時に Git フックを入れる。9.2） |
+| `prepare` | Git の作業ツリー内でのみ `lefthook install`（`pnpm install` 時に Git フックを入れる。9.2）。コンテナのビルド（6.4）は `.git` を含まず git もないため実行しない（無条件にすると依存の段階が失敗する） |
 | `container:up` / `container:down` | `.dev.vars` の存在確認 → `podman-compose up --build` / `podman-compose down`（6.4） |
 
 - 本番デプロイ用の script は設けない。正規経路は CI のみとする（`architecture.md` 6章。ローカルからの `wrangler deploy` は動作確認用途で常用しない）。
