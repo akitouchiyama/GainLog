@@ -1,0 +1,24 @@
+name: setup
+description: Node・pnpm を用意して依存をインストールする（project-structure.md 9.5・10章）
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@v7
+      with:
+        node-version-file: .nvmrc
+    # pnpm は package.json の packageManager（corepack）で版を固定する
+    - name: pnpm を有効化
+      shell: bash
+      run: corepack enable
+    - name: pnpm store のパスを取得
+      id: pnpm-store
+      shell: bash
+      run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+    - uses: actions/cache@v6
+      with:
+        path: ${{ steps.pnpm-store.outputs.path }}
+        key: pnpm-store-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+        restore-keys: pnpm-store-${{ runner.os }}-
+    - name: 依存をインストール
+      shell: bash
+      run: pnpm install --frozen-lockfile
