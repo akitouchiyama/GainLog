@@ -1,0 +1,113 @@
+# PR の検査（project-structure.md 9.5、test.md 10.1、ADR-0010）。
+# gitleaks を先頭で実行し、通過後に check・container-build・e2e を並列に実行する。
+# Branch protection の必須チェックは check と e2e（CONTRIBUTING.md で手順化）。
+# main へのマージ時のデプロイはここには含めない（初回デプロイ（手動）の後、結合テストの前に別途構築する。Issue #27）。
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+env:
+  # ローカル（pre-commit）と同じ版にそろえる
+  GITLEAKS_VERSION: 8.30.1
+
+jobs:
+  gitleaks:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # PR のコミット範囲を検査するため、履歴を全件取得する
+          fetch-depth: 0
+      # gitleaks-action は Organization のリポジトリでライセンスキーを要するため使わず、バイナリを直接実行する
+      - name: gitleaks を導入
+        run: |
+          base="https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}"
+          archive="gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          cd "$RUNNER_TEMP"
+          curl -fsSL -O "${base}/${archive}" -O "${base}/gitleaks_${GITLEAKS_VERSION}_checksums.txt"
+          grep " ${archive}\$" "gitleaks_${GITLEAKS_VERSION}_checksums.txt" | sha256sum -c -
+          tar xzf "$archive" gitleaks
+          sudo install -m 755 gitleaks /usr/local/bin/gitleaks
+      - name: PR のコミット範囲を検査
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: gitleaks git --redact --no-banner --log-opts="${BASE_SHA}..${HEAD_SHA}"
+
+  check:
+    needs: gitleaks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup
+      - run: pnpm lint
+      - run: pnpm format:check
+      - run: pnpm typecheck
+      # カバレッジは計測のみで閾値は置かない（test.md 10.3）。要約をジョブサマリーに出す
+      - name: テスト（全 projects・カバレッジ計測）
+        shell: bash # pipefail を有効にして、テスト失敗が tee に隠れないようにする
+        run: |
+          pnpm test:coverage --coverage.reporter=text --coverage.reporter=text-summary | tee "$RUNNER_TEMP/test.log"
+      - name: カバレッジの要約をジョブサマリーへ
+        if: always()
+        run: |
+          {
+            echo '### カバレッジ（計測のみ・閾値なし）'
+            echo '```'
+            sed -n '/Coverage summary/,$p' "$RUNNER_TEMP/test.log"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - run: pnpm build
+
+  container-build:
+    needs: gitleaks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      # ビルドのみ。起動・動作確認は行わない（project-structure.md 6.4・9.5）
+      - run: podman build -f Containerfile -t gainlog:ci .
+
+  e2e:
+    needs: gitleaks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup
+      - name: Playwright の版を取得
+        id: playwright
+        run: echo "version=$(pnpm exec playwright --version | awk '{print $2}')" >> "$GITHUB_OUTPUT"
+      - name: ブラウザのキャッシュ
+        id: browsers
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
+      - name: Chromium を導入（キャッシュなし）
+        if: steps.browsers.outputs.cache-hit != 'true'
+        run: pnpm exec playwright install --with-deps chromium
+      - name: OS の依存のみ導入（キャッシュあり）
+        if: steps.browsers.outputs.cache-hit == 'true'
+        run: pnpm exec playwright install-deps chromium
+      - run: pnpm e2e
+      - name: 失敗時のレポートを保存
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-report
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7

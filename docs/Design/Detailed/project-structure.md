@@ -41,7 +41,7 @@
 | 言語 | TypeScript | **6.0.3（固定）** | 7 系は周辺ツールとの相性が未確認のため採用しない |
 | Lint / Format | ESLint（flat config）＋ typescript-eslint、Prettier | ESLint 10.14.0・`@eslint/js` 10.0.1・typescript-eslint 8.72.2・globals 17.14.0・eslint-config-prettier 10.1.8、Prettier **3.9.10（固定）** | 品質ゲートの導入時（2026-11-12）に導入。Prettier は版によって整形結果が変わるため固定する（3.10.x は公開直後のため見送り） |
 | Git フック | Lefthook | 2.2.2 | `prepare` script の `lefthook install` でフックを入れる（10章） |
-| シークレット検出 | gitleaks | 開発機で 8.21.2 を確認 | npm 依存ではないバイナリ。pre-commit と CI。開発機への導入手順は `CONTRIBUTING.md` |
+| シークレット検出 | gitleaks | 8.30.1（開発機・CI とも同じ版。CI は `ci.yml` の `GITLEAKS_VERSION` で固定） | npm 依存ではないバイナリ。pre-commit と CI。開発機への導入手順は `CONTRIBUTING.md` |
 | パッケージマネージャ | pnpm | 12.11.2（`packageManager` で固定） | 依存のビルドスクリプトの許可が必要（10章） |
 | コンテナ | Podman ＋ podman-compose（Containerfile / Compose Spec） | 開発機で Podman 4.9.3・podman-compose 1.0.6 を確認 | npm 依存ではない。ビルド成果物の確認用（6.4） |
 
@@ -66,7 +66,7 @@ GainLog/
 │   └── hooks/                # Git フックから呼ぶ決定論チェック（Node 標準のみ。TypeScript を Node で直接実行。9章）
 │       └── allowed-packages.json  # 要件整合性チェックの許可リスト（9.4）
 ├── docs/                     # 要件・設計書・ADR
-├── .github/workflows/        # CI/CD（9章。実体は CI の構築時に作成）
+├── .github/workflows/        # CI（9.5）。PR の検査は ci.yml、共通手順は actions/setup。main のデプロイは初回デプロイ（手動）の後に追加
 ├── public/
 │   └── _headers               # 静的アセット応答への CSP 付与（frontend.md 13.2章）
 ├── index.html                # Vite のクライアントエントリ（リポジトリ直下）
@@ -466,7 +466,7 @@ PRAGMA foreign_keys=ON;
 
 ## 9. 品質ゲート・ツールチェーン方針（ADR-0010）
 
-設計判断を本書で定める。pre-commit は実装前作業の品質ゲート導入（2026-11-12）で導入済みで、定義は `lefthook.yml`。CI（9.5）は CI の構築時に導入する。
+設計判断を本書で定める。pre-commit は実装前作業の品質ゲート導入（2026-11-12）で導入済みで、定義は `lefthook.yml`。CI（9.5）のうち PR の検査は実装前作業の CI 構築（2026-11-13）で導入済みで、定義は `.github/workflows/ci.yml`。main のデプロイは、実装が終わって初回デプロイ（手動）を済ませた後、結合テストの前に導入する（#27）。
 
 ### 9.1 全体像
 
@@ -527,9 +527,16 @@ Git 純正の pre-commit の一部として、LLM を呼ばないルールベー
 - **PR**: 次の2段で実行する。`architecture.md` 6章が定める `main` マージ時のデプロイフローに加えて、PR 時にも検査を行う（追従は12章）。
   1. **gitleaks ジョブ**（先頭・独立）: 依存のインストールもビルドも不要なため最初に実行する。PR のコミット範囲を検査するため checkout は `fetch-depth: 0` とする。gitleaks はバイナリを直接実行する（`gitleaks-action` v2 は Organization のリポジトリでライセンスキーを要するため、将来の移管に備えて依存しない）。
   2. **検査ジョブ**（`needs: gitleaks`）: 依存インストール（`pnpm install --frozen-lockfile`）→ lint → 型チェック → テスト（Vitest）→ ビルド。gitleaks が検知した場合は実行されない。
-  3. **コンテナビルドジョブ**（`needs: gitleaks`。検査ジョブと並列）: `Containerfile` からイメージをビルドし、定義が壊れていないことを確認する（6.4）。起動・動作確認までは行わない。ランナーの Podman を使う想定で、使えない場合は `docker build` で代替する（Containerfile は OCI 準拠のためどちらでもビルドできる）。GitHub Actions の `ubuntu-24.04` ランナー（イメージ 20261004）には Podman 4.9.3（開発機と同じ版）・Buildah・Docker が導入済みであることを、ランナーイメージの公式の導入ソフト一覧で確認した。podman-compose は入っていないが、このジョブはビルドのみのため `podman build` で足りる。実地での動作は CI の構築時に確認する。
+  3. **コンテナビルドジョブ**（`needs: gitleaks`。検査ジョブと並列）: `Containerfile` からイメージをビルドし、定義が壊れていないことを確認する（6.4）。起動・動作確認までは行わない。ランナーの Podman を使う想定で、使えない場合は `docker build` で代替する（Containerfile は OCI 準拠のためどちらでもビルドできる）。GitHub Actions の `ubuntu-24.04` ランナー（イメージ 20261004）には Podman 4.9.3（開発機と同じ版）・Buildah・Docker が導入済みであることを、ランナーイメージの公式の導入ソフト一覧で確認した。podman-compose は入っていないが、このジョブはビルドのみのため `podman build` で足りる。実地では、ubuntu-24.04 の Podman で `podman build` が通ることを確認した（27〜30 秒）。
   4. **E2E ジョブ**（`needs: gitleaks`。検査ジョブ・コンテナビルドジョブと並列）: Playwright で主要シナリオを実行する（`test.md` 7・10.1章）。PR の必須チェックとし、`main` では再実行しない。
-- **main**: テスト → ビルド → マイグレーション適用 → `wrangler deploy`（6.2）。テストが失敗した場合はデプロイを中断する。`wrangler deploy` が失敗した場合は、マイグレーションを再適用せずデプロイのみを再試行する（ADR-0004）。
+- **実装（2026-11-13）**: `.github/workflows/ci.yml`（`name: CI`、`main` 向けの `pull_request` のみで起動。同じ PR の古い実行は concurrency で取り消す。権限は `contents: read`）に、ジョブ `gitleaks` / `check` / `container-build` / `e2e` を置く。**Branch protection の必須チェックにするのは `check` と `e2e`**（下記）。
+  - `check` と `e2e` で共通の手順（Node・corepack・pnpm store のキャッシュ・`pnpm install --frozen-lockfile`）は、ローカルの composite action `.github/actions/setup` にまとめる。
+  - `check` の中身：`pnpm lint` → `pnpm format:check` → `pnpm typecheck` → `pnpm test:coverage`（要約をジョブサマリーに出す。閾値なし。`test.md` 10.3）→ `pnpm build`。`format:check` は pre-commit の Prettier が staged のみを対象にする見逃しを全件で拾う。
+  - `e2e` はブラウザ（`~/.cache/ms-playwright`）を `@playwright/test` の版をキーにキャッシュする。キャッシュがあっても OS の依存は毎回 `playwright install-deps` で入れる。失敗時はレポートをアーティファクトとして保存する。
+  - 使う Action は GitHub 公式（`actions/checkout`・`setup-node`・`cache`・`upload-artifact`）のみで、メジャー版のタグで指定する。pnpm は corepack、gitleaks は公式リリースのバイナリを checksum 検証して導入する。
+  - 実測（初回・再実行）：`gitleaks` 6 秒、`check` 24〜30 秒、`container-build` 27〜30 秒、`e2e` 35〜47 秒（ブラウザのキャッシュあり 35 秒）。PR 全体の待ち時間は約 1 分。
+  - gitleaks が検知すると後続の 3 ジョブがスキップされることを、使い捨ての PR（偽のトークンを含む）で確認した。
+- **main**: テスト → ビルド → マイグレーション適用 → `wrangler deploy`（6.2）。**このワークフローは未実装**で、実装が終わって初回デプロイ（ローカルからの手動 `wrangler deploy`。`architecture.md` 6章）を済ませた後、結合テストの前に追加する（#27）。本番 D1 の作成・初回 migration の適用・シークレット設定は初回デプロイの作業で先に行い、CD では Cloudflare API token と `CLOUDFLARE_ACCOUNT_ID` の登録と workflow の作成を行う。初回の migration の手動適用は `architecture.md` 7章の「手動適用は行わない」の例外になり、初回デプロイの作業で同章に明記する。テストが失敗した場合はデプロイを中断する。`wrangler deploy` が失敗した場合は、マイグレーションを再適用せずデプロイのみを再試行する（ADR-0004）。
 - PR の必須チェック化（Branch protection）は GitHub の設定であり、`CONTRIBUTING.md`（実装着手直前）で手順化する。必須にするのは検査ジョブ・E2E ジョブ（`test.md` 10.1）で、「マージ前にブランチを最新化」も有効にする（`main` で E2E を再実行しない前提のため）。
 
 ## 10. パッケージマネージャ・npm scripts
