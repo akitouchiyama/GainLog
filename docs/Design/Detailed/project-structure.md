@@ -487,7 +487,7 @@ PRAGMA foreign_keys=ON;
 | 禁止ファイルガード | `.env*`、`.dev.vars`・`.dev.vars.<env>`（`.dev.vars.example` は許可）、秘密鍵類（`*.pem`・`*.key`・`*.p12`・`*.pfx`）、`.wrangler/` 配下（`state` を含むローカル D1）、1MB を超えるファイルを拒否する（追加・変更とも）。`.gitignore` との二重防御 |
 | lint・format・型 | ESLint・Prettier（`--check`。自動修正はしない）は staged のファイルを対象にする。型チェックは `pnpm typecheck`（`tsc -b` で全体） |
 | 関連テスト | `vitest related --run <staged のソース/テストファイル>`（`test.md` 4.4・2.2）。変更ファイルから依存をたどった関連テストだけを実行し、Red（失敗するテスト）の誤コミットを止める。E2E は対象外。全件は CI の責務で、依存をたどれない変更（設定ファイル・migration 等）の拾い漏れは CI が最終防御線となる。実測では shared・client・api（workerd）の 3 領域をまとめて変更しても約 5.7 秒（`test.md` 15章 13）。**`vitest related --run -- <files>` のように `--` を付けるとファイル指定が無視され、`passWithNoTests` により 1 件も実行せずに成功する**ため、`--` は付けない |
-| migration 再作成ガード | `migrations/*.sql` の差分に `__new_` または `DROP TABLE` を含む場合、SQL 先頭に `-- reviewed-rebuild: <理由>` のコメントがなければ失敗させる。ただし**親テーブル（`users` / `exercises` / `workout_records`）の `DROP TABLE` は、コメントがあっても失敗させる**（子行が全件消えるため。8.3） |
+| migration 再作成ガード | `migrations/*.sql` の差分に `__new_` または `DROP TABLE` を含む場合、SQL 先頭に `-- reviewed-rebuild: <理由>` のコメントがなければ失敗させる。ただし**親テーブル（`users` / `exercises` / `workout_records`）の `DROP TABLE` は、コメントがあっても失敗させる**（子行が全件消えるため。8.3）。判定は行ではなく **SQL 文の単位**で行う（ファイル全体を `;` で文に分け、追加行を含む文を改行・空白をまとめてから検査する。複数行にまたがる文や文の一部の変更も拾う）。テーブル名はスキーマ名付き（`main.users` 等）やクォート付きも親テーブルとして扱う。文字列リテラル内の `;`・`--` は考慮しない |
 | 要件整合性チェック | 9.4 |
 
 - 実装は `lefthook.yml` の pre-commit（各チェックを並列に実行し、成功したジョブの出力は表示しない）。各チェックの判定ロジックは `scripts/hooks/*.ts` の純粋関数とし、Vitest の `scripts` プロジェクトでテストする（`test.md` 4.1）。git の読み取りは `scripts/hooks/git.ts` に分ける。

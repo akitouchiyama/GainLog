@@ -5,7 +5,11 @@ const MARK = '-- reviewed-rebuild: CHECK 制約の変更。トリガーは末尾
 
 /** 新規ファイル（全行が追加行）として検査する */
 const checkNew = (sql: string, path = 'migrations/0003_x.sql') =>
-  checkMigration({ path, content: sql, addedLines: sql.split('\n') })
+  checkMigration({
+    path,
+    content: sql,
+    addedLineNumbers: sql.split('\n').map((_, i) => i + 1),
+  })
 
 const REBUILD_CHILD = [
   'PRAGMA foreign_keys=OFF;',
@@ -100,8 +104,68 @@ describe('checkMigration', () => {
       checkMigration({
         path: 'migrations/0003_x.sql',
         content,
-        addedLines: ['SELECT 1;'],
+        addedLineNumbers: [2],
       }),
     ).toEqual([])
+  })
+
+  it.each([
+    'DROP TABLE main.users;',
+    'DROP TABLE `main`.`users`;',
+    'DROP TABLE "main"."exercises";',
+    'DROP TABLE IF EXISTS main . workout_records;',
+  ])('スキーマ名付きの親テーブルの DROP も印があっても拒否する: %s', (stmt) => {
+    const [v, ...rest] = checkNew(`${MARK}\n${stmt}`)
+    expect(v?.reason).toContain('親テーブル')
+    expect(rest).toEqual([])
+  })
+
+  it('スキーマ名付きでも親テーブル名で始まるだけの別テーブルは親として扱わない', () => {
+    expect(checkNew(`${MARK}\nDROP TABLE main.users_backup;`)).toEqual([])
+  })
+
+  it('複数行に分かれた親テーブルの DROP を拒否する', () => {
+    const [v] = checkNew('DROP\nTABLE\n  `users`;')
+    expect(v?.reason).toContain('親テーブル')
+  })
+
+  it('複数行に分かれた子テーブルの DROP は印がなければ拒否する', () => {
+    const [v] = checkNew('DROP\nTABLE `workout_sets`;')
+    expect(v?.reason).toContain('reviewed-rebuild')
+  })
+
+  it('文の一部の行だけが追加された場合も、文全体で判定する', () => {
+    expect(
+      checkMigration({
+        path: 'migrations/0003_x.sql',
+        content: 'SELECT 1;\nDROP TABLE\n`users`;',
+        addedLineNumbers: [3],
+      })[0]?.reason,
+    ).toContain('親テーブル')
+  })
+
+  it('追加行を含まない文は、同じファイルにあっても対象外', () => {
+    expect(
+      checkMigration({
+        path: 'migrations/0003_x.sql',
+        content: 'DROP TABLE `users`;\nSELECT\n1;',
+        addedLineNumbers: [3],
+      }),
+    ).toEqual([])
+  })
+
+  it('文を終わらせる `;` だけの追加行でも、その文を判定する', () => {
+    expect(
+      checkMigration({
+        path: 'migrations/0003_x.sql',
+        content: 'DROP TABLE users\n;',
+        addedLineNumbers: [2],
+      })[0]?.reason,
+    ).toContain('親テーブル')
+  })
+
+  it('コメントで区切られた行の DROP TABLE も文として組み立てて判定する', () => {
+    const [v] = checkNew('DROP -- 理由\nTABLE users;')
+    expect(v?.reason).toContain('親テーブル')
   })
 })

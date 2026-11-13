@@ -8,8 +8,8 @@ export type MigrationChange = {
   path: string
   /** ステージ済みのファイル全文 */
   content: string
-  /** 差分で追加された行 */
-  addedLines: string[]
+  /** 差分で追加された行の行番号（1 始まり） */
+  addedLineNumbers: number[]
 }
 export type Violation = { path: string; reason: string }
 
@@ -19,19 +19,55 @@ export const PARENT_TABLES = ['users', 'exercises', 'workout_records'] as const
 const TARGET = /^migrations\/[^/]+\.sql$/
 const MARK = /^--\s*reviewed-rebuild:\s*\S/
 const REBUILD = /__new_|\bdrop\s+table\b/i
+// 識別子は素のまま・バッククォート・ダブルクォート・角括弧で囲まれうる。スキーマ名（main. 等）も付きうる
+const IDENT = String.raw`[\x60"\[]?\w+[\x60"\]]?`
 const PARENT_DROP = new RegExp(
-  String.raw`\bdrop\s+table\s+(if\s+exists\s+)?[\x60"\[]?(${PARENT_TABLES.join('|')})(?![\w])`,
+  String.raw`\bdrop\s+table\s+(?:if\s+exists\s+)?(?:${IDENT}\s*\.\s*)?[\x60"\[]?(?:${PARENT_TABLES.join('|')})(?![\w])`,
   'i',
 )
 
 /** 行末までの SQL コメント（--）を除く。文字列リテラル内の -- は考慮しない */
 const stripComment = (line: string) => line.replace(/--.*$/, '')
 
+/**
+ * ファイル全体を `;` で文に分け、追加行を 1 行でも含む文を、改行・連続空白を 1 つの空白に
+ * まとめて返す。文が複数行にまたがる場合や、文の一部だけが変更された場合も文全体で判定するため。
+ * 文字列リテラル内の `;` は考慮しない。
+ */
+export function changedStatements(
+  content: string,
+  addedLineNumbers: number[],
+): string[] {
+  const added = new Set(addedLineNumbers)
+  const statements: string[] = []
+  let parts: string[] = []
+  let touched = false
+  const flush = () => {
+    const text = parts.join(' ').replace(/\s+/g, ' ').trim()
+    if (touched && text !== '') statements.push(text)
+    parts = []
+    touched = false
+  }
+  content.split('\n').forEach((raw, i) => {
+    const segments = stripComment(raw).split(';')
+    segments.forEach((segment, j) => {
+      parts.push(segment)
+      // 中身のある部分、または文を終わらせる `;` を含む追加行は、その文の変更とみなす
+      const terminates = j < segments.length - 1
+      if (added.has(i + 1) && (segment.trim() !== '' || terminates))
+        touched = true
+      if (terminates) flush()
+    })
+  })
+  flush()
+  return statements
+}
+
 export function checkMigration(change: MigrationChange): Violation[] {
-  const { path, content, addedLines } = change
+  const { path, content, addedLineNumbers } = change
   if (!TARGET.test(path)) return []
 
-  const code = addedLines.map(stripComment)
+  const code = changedStatements(content, addedLineNumbers)
   if (code.some((l) => PARENT_DROP.test(l))) {
     return [
       {
@@ -60,7 +96,7 @@ if (import.meta.main) {
       checkMigration({
         path,
         content: stagedContent(path),
-        addedLines: stagedAddedLines(path).map((l) => l.text),
+        addedLineNumbers: stagedAddedLines(path).map((l) => l.line),
       }),
     )
   if (violations.length > 0) {
