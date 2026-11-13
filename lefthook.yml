@@ -47,4 +47,5 @@ pre-commit:
     # 関連テスト（test.md 2.2・4.4。E2E と全件は CI の責務） -------------
     - name: vitest-related
       glob: ['{src,scripts}/**/*.{ts,tsx}']
-      run: pnpm exec vitest related --run -- {staged_files}
+      # `--` を付けるとファイル指定が無視され、passWithNoTests により黙って成功するため付けない
+      run: pnpm exec vitest related --run {staged_files}
