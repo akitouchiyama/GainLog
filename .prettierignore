@@ -1,0 +1,16 @@
+# ドキュメントは対象外（設計書の日本語テーブルを整形差分で崩さないため）
+docs/
+*.md
+
+# 生成物・ロックファイル
+pnpm-lock.yaml
+worker-configuration.d.ts
+dist/
+.wrangler/
+coverage/
+playwright-report/
+test-results/
+migrations/meta/
+
+# 個人のローカル設定（Git 管理外）
+.claude/settings.local.json

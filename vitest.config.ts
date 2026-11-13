@@ -3,7 +3,9 @@ import { cloudflareTest, readD1Migrations } from '@cloudflare/vitest-plugin'
 import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vitest/config'
 
-const alias = { '@shared': fileURLToPath(new URL('./src/shared', import.meta.url)) }
+const alias = {
+  '@shared': fileURLToPath(new URL('./src/shared', import.meta.url)),
+}
 
 export default defineConfig({
   test: {
@@ -21,7 +23,11 @@ export default defineConfig({
     projects: [
       {
         resolve: { alias },
-        test: { name: 'shared', environment: 'node', include: ['src/shared/**/*.test.ts'] },
+        test: {
+          name: 'shared',
+          environment: 'node',
+          include: ['src/shared/**/*.test.ts'],
+        },
       },
       {
         resolve: { alias },
@@ -38,13 +44,25 @@ export default defineConfig({
         plugins: [
           cloudflareTest(async () => ({
             wrangler: { configPath: './wrangler.jsonc' },
-            miniflare: { bindings: { TEST_MIGRATIONS: await readD1Migrations('migrations') } },
+            miniflare: {
+              bindings: {
+                TEST_MIGRATIONS: await readD1Migrations('migrations'),
+              },
+            },
           })),
         ],
         test: {
           name: 'api',
           include: ['src/api/**/*.test.ts'],
           setupFiles: ['./src/api/testing/apply-migrations.ts'],
+        },
+      },
+      {
+        // Git フックから呼ぶ決定論チェック（project-structure.md 9章）
+        test: {
+          name: 'scripts',
+          environment: 'node',
+          include: ['scripts/**/*.test.ts'],
         },
       },
     ],

@@ -1,0 +1,56 @@
+# Git フックの定義（project-structure.md 9.2、ADR-0010）。
+# pre-commit は決定論的なチェックのみで、LLM は使わない。どれか 1 つでも失敗するとコミットを止める。
+# フックは pnpm install（prepare script の lefthook install）で .git/hooks に入る。
+#
+# 制約：eslint・prettier・typecheck・vitest-related は、ステージした内容ではなく作業ツリーの内容を検査する
+# （typecheck は作業ツリー全体）。git add -p で一部だけステージすると、検査した中身とコミットする
+# 中身がずれることがある。その見逃しは CI（全件）が拾う。ステージしていない作業中のエラーで
+# コミットが止まることもある（安全側）。
+# pre-push の LLM レビュー（9.3）は、レビュー/セキュリティエージェントの整備と合わせて後で追加する。
+
+# 成功したジョブの出力は隠し、失敗したジョブの出力と結果の一覧だけを表示する
+output:
+  - summary
+  - failure
+
+pre-commit:
+  parallel: true
+  jobs:
+    # 機密・禁止ファイルの混入防止 ----------------------------------------
+    - name: gitleaks
+      run: |
+        command -v gitleaks >/dev/null 2>&1 || {
+          echo 'gitleaks が見つかりません。導入してから再度コミットしてください（https://github.com/gitleaks/gitleaks）' >&2
+          exit 1
+        }
+        gitleaks git --staged --redact --no-banner
+
+    - name: forbidden-files
+      run: node scripts/hooks/forbidden-files.ts
+
+    - name: migration-guard
+      glob: 'migrations/*.sql'
+      run: node scripts/hooks/migration-guard.ts
+
+    - name: requirement-check
+      run: node scripts/hooks/requirement-check.ts
+
+    # lint・format・型 -----------------------------------------------------
+    - name: eslint
+      glob: ['*.{js,ts,tsx}', '**/*.{js,ts,tsx}']
+      run: pnpm exec eslint --no-warn-ignored -- {staged_files}
+
+    - name: prettier
+      run: pnpm exec prettier --check --ignore-unknown -- {staged_files}
+
+    - name: typecheck
+      glob:
+        - '*.{js,ts,tsx,json,jsonc}'
+        - '**/*.{js,ts,tsx,json,jsonc}'
+      run: pnpm typecheck
+
+    # 関連テスト（test.md 2.2・4.4。E2E と全件は CI の責務） -------------
+    - name: vitest-related
+      glob: ['{src,scripts}/**/*.{ts,tsx}']
+      # `--` を付けるとファイル指定が無視され、passWithNoTests により黙って成功するため付けない
+      run: pnpm exec vitest related --run {staged_files}

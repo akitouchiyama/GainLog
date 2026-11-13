@@ -138,13 +138,14 @@ flowchart LR
 
 ### 4.1 Vitest のプロジェクト構成
 
-ルートの `vitest.config.ts` で、`projects` により3つに分ける。
+ルートの `vitest.config.ts` で、`projects` により4つに分ける。
 
 | プロジェクト | 環境 | 対象 | 備考 |
 |---|---|---|---|
 | `shared` | Node | `src/shared/**/*.test.ts` | 副作用なし。最速 |
 | `api` | Workers（workerd。`@cloudflare/vitest-plugin`） | `src/api/**/*.test.ts` | ローカル D1 に migration 適用済み。`wrangler.jsonc` のバインディングを使う |
 | `client` | jsdom | `src/client/**/*.test.{ts,tsx}` | RTL・MSW・`jest-dom` を setup ファイルで登録 |
+| `scripts` | Node | `scripts/**/*.test.ts` | Git フック用の決定論チェックの判定ロジック（`project-structure.md` 9.2）。アプリのコードではないためカバレッジの対象外。品質ゲートの導入時に追加 |
 
 - **`vitest.config.ts` は `vite.config.ts` を継承せず、独立して定義する**（`project-structure.md` 6.3「Worker 用プラグインを client・shared に読み込ませない」・未解決4 の回収）。`vite.config.ts` は `@cloudflare/vite-plugin` を含むため、継承すると jsdom／Node のテストに Worker 用プラグインが入ってしまう。
 - ただし `@shared` エイリアスと React プラグイン（JSX 変換）は、`vitest.config.ts` の各プロジェクトに同じ定義を置く（エイリアスの定義元は 1 箇所の定数にして共有する。重複定義によるずれを避ける）。
@@ -177,7 +178,7 @@ flowchart LR
 | `test` | `vitest run`（全 projects。CI と同じ） |
 | `test:watch` | `vitest`（TDD の開発中に使う。対象プロジェクトの絞り込みは Vitest の `--project` を使う） |
 | `test:coverage` | `vitest run --coverage`（10.3） |
-| `test:related` | `vitest related --run`（pre-commit が staged のファイルを渡して呼ぶ。`project-structure.md` 9.2） |
+| `test:related` | `vitest related --run`（関連テストだけを手動で流すときに使う。pre-commit は `lefthook.yml` から同じコマンドに staged のファイルを渡して直接呼ぶ。ファイルの前に `--` を付けない。`project-structure.md` 9.2） |
 | `e2e` | `playwright test`（7章。`frontend.md` 12.3 の行の具体化） |
 
 ## 5. バックエンドのテスト
@@ -417,6 +418,7 @@ Google ログインは実際には通せないため、**セッションを直�
 | 単体・統合・コンポーネント | 対象の**隣**に `<対象>.test.ts(x)`（例：`records.routes.ts` ↔ `records.routes.test.ts`）。`__tests__/` ディレクトリは作らない |
 | DB 構造 | `src/api/infrastructure/db/` の隣に `constraints.test.ts`・`triggers.test.ts`・`seed.test.ts` |
 | 横断テスト | `src/api/interface/ownership.test.ts` |
+| Git フックのチェック | `scripts/hooks/` の対象の隣に `<対象>.test.ts` |
 | E2E | `e2e/<シナリオ>.spec.ts`（`*.spec.ts` は Playwright 専用で、Vitest の対象外） |
 | `describe` | 対象の名前（関数名・コンポーネント名・エンドポイント。例：`describe('POST /api/records/{date}/exercises')`） |
 | `it` | **日本語で「〜のとき、〜になる」**の形（例：`it('同日に同じ種目を追加すると、409 を返す')`）。TODO リスト（`it.todo`）も同じ形式で書く |
@@ -569,10 +571,10 @@ Google ログインは実際には通せないため、**セッションを直�
 4. ~~**Vitest 5 と `@cloudflare/vitest-plugin` 1.4.0 の組み合わせ・カバレッジ**~~ → **解決済み**。Vitest 5.0.3 のまま動作し、カバレッジは v8 に確定した（10.3）。`msw` 3.0.3・`@testing-library/jest-dom` 7.0.1・`jsdom` 30.1.2 との組み合わせも動作した（`@vitest/mocker` 5.0.3 が msw `^2.4.9` を peer とする警告が出るが、`msw/node` の動作に影響はなかった）。
 5. ~~**E2E のローカル D1 への書き込み**~~ → **解決済み**。`wrangler d1 execute --local` の書き込みは起動中の `vite preview` から即座に見え、並列の読み取り中に書き込んでも競合しなかった。7.2 の方式のままでよい。
 6. ~~**`__Host-` プレフィックスの Cookie が `http://localhost` で受理されるか**~~ → **解決済み**。Chromium 156 で受理・送信される。注入は `domain: 'localhost'`・`path: '/'` で行う（7.2）。
-7. **テストコードの tsconfig と lint**：型の読み込み方は確定した（`tsconfig.api.json` の `types` に `@cloudflare/vitest-plugin/types` を足す。tsconfig は分割しない。`project-structure.md` 3.2）。**残るのは lint**：本番コードからの `cloudflare:test` の import 禁止、`testing/` の import 禁止（9.2）を `no-restricted-imports` で実現できるか。品質ゲートの導入時に確認する。
+7. ~~**テストコードの tsconfig と lint**~~ → **解決済み**（品質ゲートの導入時、2026-11-12）。型は `tsconfig.api.json` の `types` に `@cloudflare/vitest-plugin/types` を足す（tsconfig は分割しない）。本番コードからの `cloudflare:test`・`testing/` の import 禁止（9.2）は `@typescript-eslint/no-restricted-imports` で実現し、違反コードで検出を確認した（`project-structure.md` 3.2）。
 8. ~~**ライブラリの版の再確認**~~ → **解決済み**。導入した版は 1章・`project-structure.md` 1章のとおり。`pnpm why wrangler` で 4.149.0 の単一の版に解決されることを確認した。
 9. **fake と本物の契約テスト**（8章）：Phase 1 では必須としないが、fake の挙動のずれで不具合が出た時点で導入を検討する。
 10. **E2E の CI**：Playwright のブラウザのキャッシュ、所要時間、`retries`・`workers` の初期値の妥当性（7.1・7.4）。実測して見直す。
 11. ~~**テーブル再作成時の親行・子行の実挙動**~~ → **解決済み**（`project-structure.md` 8.3）。親テーブルの再作成は子行が全件消えるため禁止とした。子テーブルの再作成を含む migration を書く場合は、トリガーの再作成を 5.3 の層の回帰テストで確認する。
 12. **手動確認手順の具体化**（12章）：URL・計測コマンド・記録の置き場所を、初回デプロイの前に確定する。
-13. **pre-commit の関連テスト**（2.2、`project-structure.md` 9.2）：`vitest related` が workerd 上の `api` プロジェクトでも期待どおり動くか、所要時間が TDD の小さなコミットを妨げないかを実測する。遅い・拾い漏れが多い場合は、対象を `shared`・`client` に絞る、または pre-commit から外して CI のみにする。品質ゲートの導入時に確認する。
+13. ~~**pre-commit の関連テスト**~~ → **解決済み**（品質ゲートの導入時、2026-11-12）。workerd 上の `api` プロジェクトでも、変更ファイルに関連するテストが選ばれて実行される。所要時間は shared・client・api の 3 領域をまとめて変更して約 5.7 秒（許容の目安は 30 秒）で、全プロジェクトを pre-commit の対象のままとする。失敗するテスト（Red）をステージするとコミットが止まることも確認した。`--` を付けるとファイル指定が無視されて黙って成功する点に注意（`project-structure.md` 9.2）。

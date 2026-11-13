@@ -1,3 +1,6 @@
+# 依存のビルドスクリプトの許可（project-structure.md 10章）。pnpm 12 は既定でブロックする。
 allowBuilds:
   esbuild: true
   workerd: true
+  # postinstall は lefthook install を呼ぶだけ。package.json の prepare で実行するため許可しない
+  lefthook: false

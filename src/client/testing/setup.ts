@@ -11,7 +11,10 @@ if (typeof HTMLDialogElement.prototype.showModal !== 'function') {
   }
 }
 if (typeof HTMLDialogElement.prototype.close !== 'function') {
-  HTMLDialogElement.prototype.close = function (this: HTMLDialogElement, returnValue?: string) {
+  HTMLDialogElement.prototype.close = function (
+    this: HTMLDialogElement,
+    returnValue?: string,
+  ) {
     if (!this.open) return
     if (returnValue !== undefined) this.returnValue = returnValue
     this.open = false

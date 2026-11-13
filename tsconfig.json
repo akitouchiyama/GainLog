@@ -3,6 +3,7 @@
   "references": [
     { "path": "./tsconfig.shared.json" },
     { "path": "./tsconfig.api.json" },
-    { "path": "./tsconfig.client.json" }
+    { "path": "./tsconfig.client.json" },
+    { "path": "./tsconfig.node.json" }
   ]
 }

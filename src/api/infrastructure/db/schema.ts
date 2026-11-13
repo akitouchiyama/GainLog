@@ -1,7 +1,13 @@
 // 検証用の暫定スキーマ（feature/project-bootstrap）。
 // 機能実装時に db.md の全 6 テーブルへ置き換える。
 import { sql } from 'drizzle-orm'
-import { check, integer, sqliteTable, text, unique } from 'drizzle-orm/sqlite-core'
+import {
+  check,
+  integer,
+  sqliteTable,
+  text,
+  unique,
+} from 'drizzle-orm/sqlite-core'
 
 export const users = sqliteTable('users', {
   id: text('id').primaryKey(),
@@ -49,7 +55,10 @@ export const workoutSets = sqliteTable(
   (t) => [
     unique().on(t.workoutRecordId, t.exerciseId, t.setNumber),
     check('workout_sets_set_number_min', sql`${t.setNumber} >= 1`),
-    check('workout_sets_weight_deci_range', sql`${t.weightDeci} BETWEEN 0 AND 9999`),
+    check(
+      'workout_sets_weight_deci_range',
+      sql`${t.weightDeci} BETWEEN 0 AND 9999`,
+    ),
     check('workout_sets_reps_min', sql`${t.reps} >= 1`),
   ],
 )

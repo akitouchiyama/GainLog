@@ -1,0 +1,42 @@
+{
+  "$comment": "requirement.md 6章の技術名と npm パッケージ名の対応表（project-structure.md 9.4）。変更するコミットには requirement.md 6章の変更も含める（requirement-check.ts が検査する）。",
+  "technologies": {
+    "TypeScript": ["typescript", "@types/node"],
+    "Hono": ["hono"],
+    "Zod": ["zod"],
+    "@hono/zod-openapi": ["@hono/zod-openapi"],
+    "Drizzle ORM（drizzle-kit）": ["drizzle-orm", "drizzle-kit"],
+    "jose": ["jose"],
+    "React": ["react", "react-dom", "@types/react", "@types/react-dom"],
+    "Vite（@cloudflare/vite-plugin・@vitejs/plugin-react）": [
+      "vite",
+      "@cloudflare/vite-plugin",
+      "@vitejs/plugin-react"
+    ],
+    "TailwindCSS（@tailwindcss/vite）": ["tailwindcss", "@tailwindcss/vite"],
+    "React Router": ["react-router"],
+    "TanStack Query": ["@tanstack/react-query"],
+    "@playwright/test": ["@playwright/test"],
+    "Vitest 5": ["vitest"],
+    "@cloudflare/vitest-plugin": ["@cloudflare/vitest-plugin"],
+    "jsdom": ["jsdom"],
+    "React Testing Library": [
+      "@testing-library/react",
+      "@testing-library/dom",
+      "@testing-library/user-event",
+      "@testing-library/jest-dom"
+    ],
+    "MSW": ["msw"],
+    "カバレッジ（@vitest/coverage-v8）": ["@vitest/coverage-v8"],
+    "Wrangler": ["wrangler"],
+    "ESLint（@eslint/js・typescript-eslint・globals・eslint-config-prettier）": [
+      "eslint",
+      "@eslint/js",
+      "typescript-eslint",
+      "globals",
+      "eslint-config-prettier"
+    ],
+    "Prettier": ["prettier"],
+    "Lefthook": ["lefthook"]
+  }
+}
