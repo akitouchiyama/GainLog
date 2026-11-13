@@ -36,6 +36,38 @@ describe('parseAddedLines', () => {
     ])
   })
 
+  it('ハンク内の `+++` で始まる行（内容が `++` で始まる追加行）も数え、後続の行番号をずらさない', () => {
+    const diff = [
+      'diff --git a/x.ts b/x.ts',
+      '--- a/x.ts',
+      '+++ b/x.ts',
+      '@@ -0,0 +1,2 @@',
+      '+++i',
+      '+next',
+    ].join('\n')
+    expect(parseAddedLines(diff)).toEqual([
+      { line: 1, text: '++i' },
+      { line: 2, text: 'next' },
+    ])
+  })
+
+  it('次のファイルの見出し `+++` は追加行として扱わない', () => {
+    const diff = [
+      '+++ b/a.ts',
+      '@@ -0,0 +1 @@',
+      '+a',
+      'diff --git a/b.ts b/b.ts',
+      '--- a/b.ts',
+      '+++ b/b.ts',
+      '@@ -0,0 +1 @@',
+      '+b',
+    ].join('\n')
+    expect(parseAddedLines(diff)).toEqual([
+      { line: 1, text: 'a' },
+      { line: 1, text: 'b' },
+    ])
+  })
+
   it('`++` で始まる内容の行も追加行として扱う', () => {
     const diff = ['+++ b/x.ts', '@@ -0,0 +1 @@', '++i'].join('\n')
     expect(parseAddedLines(diff)).toEqual([{ line: 1, text: '+i' }])

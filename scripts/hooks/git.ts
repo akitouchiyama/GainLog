@@ -47,11 +47,17 @@ export function stagedAddedLines(path: string): AddedLine[] {
 export function parseAddedLines(diff: string): AddedLine[] {
   const result: AddedLine[] = []
   let next = 0
+  // ファイルの見出し（`+++ b/...`）はハンクの外にしか現れない。ハンク内の `+++` は
+  // 内容が `++` で始まる追加行なので、ハンクの内外を区別して扱う
+  let inHunk = false
   for (const l of diff.split('\n')) {
     const hunk = /^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@/.exec(l)
     if (hunk) {
       next = Number(hunk[1])
-    } else if (l.startsWith('+') && !l.startsWith('+++')) {
+      inHunk = true
+    } else if (l.startsWith('diff --git ')) {
+      inHunk = false
+    } else if (inHunk && l.startsWith('+')) {
       result.push({ line: next++, text: l.slice(1) })
     }
   }
