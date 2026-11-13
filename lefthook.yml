@@ -1,6 +1,11 @@
 # Git フックの定義（project-structure.md 9.2、ADR-0010）。
 # pre-commit は決定論的なチェックのみで、LLM は使わない。どれか 1 つでも失敗するとコミットを止める。
 # フックは pnpm install（prepare script の lefthook install）で .git/hooks に入る。
+#
+# 制約：eslint・prettier・typecheck・vitest-related は、ステージした内容ではなく作業ツリーの内容を検査する
+# （typecheck は作業ツリー全体）。git add -p で一部だけステージすると、検査した中身とコミットする
+# 中身がずれることがある。その見逃しは CI（全件）が拾う。ステージしていない作業中のエラーで
+# コミットが止まることもある（安全側）。
 # pre-push の LLM レビュー（9.3）は、レビュー/セキュリティエージェントの整備と合わせて後で追加する。
 
 # 成功したジョブの出力は隠し、失敗したジョブの出力と結果の一覧だけを表示する
