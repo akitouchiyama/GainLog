@@ -26,7 +26,7 @@ GainLog は、日々の筋力トレーニング（種目・重量・回数・セ
 ## 技術スタック（`requirement.md` 6章より）
 
 - **Backend**: TypeScript / Hono / Zod / `@hono/zod-openapi` / OpenAPI / Vitest / Drizzle ORM（drizzle-kit）
-- **Frontend**: TypeScript / React / Vite / TailwindCSS / Zod / Vitest / Storybook
+- **Frontend**: TypeScript / React / Vite / TailwindCSS / Zod / Vitest
 - **DB**: Cloudflare D1（SQLite 互換）
 - **ビルド・開発・品質管理**: Vite（`@cloudflare/vite-plugin`）/ Wrangler / pnpm / ESLint / Prettier / Lefthook / gitleaks
 - **コンテナ**: Podman / podman-compose。ビルド成果物の確認用のみで、開発は WSL 上で行う（ADR-0012）
