@@ -66,7 +66,7 @@ GainLog/
 │   └── hooks/                # Git フックから呼ぶ決定論チェック（Node 標準のみ。TypeScript を Node で直接実行。9章）
 │       └── allowed-packages.json  # 要件整合性チェックの許可リスト（9.4）
 ├── docs/                     # 要件・設計書・ADR
-├── .github/workflows/        # CI（9.5）。PR の検査は ci.yml、共通手順は actions/setup。main のデプロイは初回デプロイの直前に追加
+├── .github/workflows/        # CI（9.5）。PR の検査は ci.yml、共通手順は actions/setup。main のデプロイは初回デプロイ（手動）の後に追加
 ├── public/
 │   └── _headers               # 静的アセット応答への CSP 付与（frontend.md 13.2章）
 ├── index.html                # Vite のクライアントエントリ（リポジトリ直下）
@@ -466,7 +466,7 @@ PRAGMA foreign_keys=ON;
 
 ## 9. 品質ゲート・ツールチェーン方針（ADR-0010）
 
-設計判断を本書で定める。pre-commit は実装前作業の品質ゲート導入（2026-11-12）で導入済みで、定義は `lefthook.yml`。CI（9.5）のうち PR の検査は実装前作業の CI 構築（2026-11-13）で導入済みで、定義は `.github/workflows/ci.yml`。main のデプロイは初回デプロイの直前に導入する。
+設計判断を本書で定める。pre-commit は実装前作業の品質ゲート導入（2026-11-12）で導入済みで、定義は `lefthook.yml`。CI（9.5）のうち PR の検査は実装前作業の CI 構築（2026-11-13）で導入済みで、定義は `.github/workflows/ci.yml`。main のデプロイは、実装が終わって初回デプロイ（手動）を済ませた後、結合テストの前に導入する（#27）。
 
 ### 9.1 全体像
 
@@ -536,7 +536,7 @@ Git 純正の pre-commit の一部として、LLM を呼ばないルールベー
   - 使う Action は GitHub 公式（`actions/checkout`・`setup-node`・`cache`・`upload-artifact`）のみで、メジャー版のタグで指定する。pnpm は corepack、gitleaks は公式リリースのバイナリを checksum 検証して導入する。
   - 実測（初回・再実行）：`gitleaks` 6 秒、`check` 24〜30 秒、`container-build` 27〜30 秒、`e2e` 35〜47 秒（ブラウザのキャッシュあり 35 秒）。PR 全体の待ち時間は約 1 分。
   - gitleaks が検知すると後続の 3 ジョブがスキップされることを、使い捨ての PR（偽のトークンを含む）で確認した。
-- **main**: テスト → ビルド → マイグレーション適用 → `wrangler deploy`（6.2）。**このワークフローは未実装**で、初回デプロイの直前（本番 D1 の作成・Cloudflare API token の登録と同時）に追加する。テストが失敗した場合はデプロイを中断する。`wrangler deploy` が失敗した場合は、マイグレーションを再適用せずデプロイのみを再試行する（ADR-0004）。
+- **main**: テスト → ビルド → マイグレーション適用 → `wrangler deploy`（6.2）。**このワークフローは未実装**で、実装が終わって初回デプロイ（ローカルからの手動 `wrangler deploy`。`architecture.md` 6章）を済ませた後、結合テストの前に追加する（#27）。本番 D1 の作成・初回 migration の適用・シークレット設定は初回デプロイの作業で先に行い、CD では Cloudflare API token と `CLOUDFLARE_ACCOUNT_ID` の登録と workflow の作成を行う。初回の migration の手動適用は `architecture.md` 7章の「手動適用は行わない」の例外になり、初回デプロイの作業で同章に明記する。テストが失敗した場合はデプロイを中断する。`wrangler deploy` が失敗した場合は、マイグレーションを再適用せずデプロイのみを再試行する（ADR-0004）。
 - PR の必須チェック化（Branch protection）は GitHub の設定であり、`CONTRIBUTING.md`（実装着手直前）で手順化する。必須にするのは検査ジョブ・E2E ジョブ（`test.md` 10.1）で、「マージ前にブランチを最新化」も有効にする（`main` で E2E を再実行しない前提のため）。
 
 ## 10. パッケージマネージャ・npm scripts

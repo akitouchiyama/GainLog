@@ -1,7 +1,7 @@
 # PR の検査（project-structure.md 9.5、test.md 10.1、ADR-0010）。
 # gitleaks を先頭で実行し、通過後に check・container-build・e2e を並列に実行する。
 # Branch protection の必須チェックは check と e2e（CONTRIBUTING.md で手順化）。
-# main へのマージ時のデプロイはここには含めない（初回デプロイの直前に別途構築する）。
+# main へのマージ時のデプロイはここには含めない（初回デプロイ（手動）の後、結合テストの前に別途構築する。Issue #27）。
 name: CI
 
 on:
