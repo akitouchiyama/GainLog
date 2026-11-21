@@ -529,15 +529,15 @@ Git 純正の pre-commit の一部として、LLM を呼ばないルールベー
   2. **検査ジョブ**（`needs: gitleaks`）: 依存インストール（`pnpm install --frozen-lockfile`）→ lint → 型チェック → テスト（Vitest）→ ビルド。gitleaks が検知した場合は実行されない。
   3. **コンテナビルドジョブ**（`needs: gitleaks`。検査ジョブと並列）: `Containerfile` からイメージをビルドし、定義が壊れていないことを確認する（6.4）。起動・動作確認までは行わない。ランナーの Podman を使う想定で、使えない場合は `docker build` で代替する（Containerfile は OCI 準拠のためどちらでもビルドできる）。GitHub Actions の `ubuntu-24.04` ランナー（イメージ 20261004）には Podman 4.9.3（開発機と同じ版）・Buildah・Docker が導入済みであることを、ランナーイメージの公式の導入ソフト一覧で確認した。podman-compose は入っていないが、このジョブはビルドのみのため `podman build` で足りる。実地では、ubuntu-24.04 の Podman で `podman build` が通ることを確認した（27〜30 秒）。
   4. **E2E ジョブ**（`needs: gitleaks`。検査ジョブ・コンテナビルドジョブと並列）: Playwright で主要シナリオを実行する（`test.md` 7・10.1章）。PR の必須チェックとし、`main` では再実行しない。
-- **実装（2026-11-13）**: `.github/workflows/ci.yml`（`name: CI`、`main` 向けの `pull_request` のみで起動。同じ PR の古い実行は concurrency で取り消す。権限は `contents: read`）に、ジョブ `gitleaks` / `check` / `container-build` / `e2e` を置く。**Branch protection の必須チェックにするのは `check` と `e2e`**（下記）。
+- **実装（2026-11-13）**: `.github/workflows/ci.yml`（`name: CI`、`main` 向けの `pull_request` のみで起動。同じ PR の古い実行は concurrency で取り消す。権限は `contents: read`）に、ジョブ `gitleaks` / `check` / `container-build` / `e2e` を置く。**Branch protection の必須チェックにするのは `gitleaks`・`check`・`e2e`**（下記）。
   - `check` と `e2e` で共通の手順（Node・corepack・pnpm store のキャッシュ・`pnpm install --frozen-lockfile`）は、ローカルの composite action `.github/actions/setup` にまとめる。
   - `check` の中身：`pnpm lint` → `pnpm format:check` → `pnpm typecheck` → `pnpm test:coverage`（要約をジョブサマリーに出す。閾値なし。`test.md` 10.3）→ `pnpm build`。`format:check` は pre-commit の Prettier が staged のみを対象にする見逃しを全件で拾う。
   - `e2e` はブラウザ（`~/.cache/ms-playwright`）を `@playwright/test` の版をキーにキャッシュする。キャッシュがあっても OS の依存は毎回 `playwright install-deps` で入れる。失敗時はレポートをアーティファクトとして保存する。
   - 使う Action は GitHub 公式（`actions/checkout`・`setup-node`・`cache`・`upload-artifact`）のみで、メジャー版のタグで指定する。pnpm は corepack、gitleaks は公式リリースのバイナリを checksum 検証して導入する。
   - 実測（初回・再実行）：`gitleaks` 6 秒、`check` 24〜30 秒、`container-build` 27〜30 秒、`e2e` 35〜47 秒（ブラウザのキャッシュあり 35 秒）。PR 全体の待ち時間は約 1 分。
-  - gitleaks が検知すると後続の 3 ジョブがスキップされることを、使い捨ての PR（偽のトークンを含む）で確認した。
+  - gitleaks が検知すると後続の 3 ジョブがスキップされることを、使い捨ての PR（偽のトークンを含む）で確認した。GitHub はスキップされたジョブを成功として扱い、必須チェックでもマージを止めない。そのため `check`・`e2e` だけを必須にすると、gitleaks の失敗時にマージできてしまう。これを防ぐため `gitleaks` 自体も必須チェックにする。
 - **main**: テスト → ビルド → マイグレーション適用 → `wrangler deploy`（6.2）。**このワークフローは未実装**で、実装が終わって初回デプロイ（ローカルからの手動 `wrangler deploy`。`architecture.md` 6章）を済ませた後、結合テストの前に追加する（#27）。本番 D1 の作成・初回 migration の適用・シークレット設定は初回デプロイの作業で先に行い、CD では Cloudflare API token と `CLOUDFLARE_ACCOUNT_ID` の登録と workflow の作成を行う。初回の migration の手動適用は `architecture.md` 7章の「手動適用は行わない」の例外になり、初回デプロイの作業で同章に明記する。テストが失敗した場合はデプロイを中断する。`wrangler deploy` が失敗した場合は、マイグレーションを再適用せずデプロイのみを再試行する（ADR-0004）。
-- PR の必須チェック化（Branch protection）は GitHub の設定であり、`CONTRIBUTING.md`（実装着手直前）で手順化する。必須にするのは検査ジョブ・E2E ジョブ（`test.md` 10.1）で、「マージ前にブランチを最新化」も有効にする（`main` で E2E を再実行しない前提のため）。
+- PR の必須チェック化（Branch protection）は GitHub の設定であり、`CONTRIBUTING.md`（実装着手直前）で手順化する。必須にするのは gitleaks ジョブ・検査ジョブ・E2E ジョブ（`test.md` 10.1。gitleaks を含める理由は上記の実装の項）で、「マージ前にブランチを最新化」も有効にする（`main` で E2E を再実行しない前提のため）。
 
 ## 10. パッケージマネージャ・npm scripts
 

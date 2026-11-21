@@ -456,12 +456,12 @@ Google ログインは実際には通せないため、**セッションを直�
 | タイミング | ジョブ | テスト |
 |---|---|---|
 | ローカル pre-commit | – | **関連テストのみ**（`vitest related --run`。E2E は対象外。`project-structure.md` 9.2） |
-| PR | gitleaks（先頭・独立） | – |
+| PR | gitleaks（先頭・独立。必須チェック） | – |
 | PR | 検査ジョブ（`needs: gitleaks`） | lint → 型チェック → **Vitest（全 projects：shared・api・client）** → ビルド |
 | PR | E2E ジョブ（`needs: gitleaks`。検査ジョブ・コンテナビルドジョブと並列） | **Playwright（7章。desktop・mobile）**。ブラウザは Chromium のみインストールする |
 | `main` マージ | テスト → ビルド → マイグレーション → デプロイ | **Vitest のみ**。失敗したらデプロイを中断する（ADR-0003）。E2E は再実行しない（PR の必須チェックで確認済みのため。E2E が通っていない変更は、そもそも `main` にマージできない） |
 
-- **auth.md 13章「CI での実行必須化の要否」の回答**：Vitest の全 projects（API 統合・所有者チェック横断を含む）は **PR・main とも必須**（失敗したらマージ・デプロイさせない）。E2E も **PR の必須チェック**とする（通らなければマージ＝デプロイができない）。`main` マージ時に再実行しないのは、PR の最新コミットで通過済みであることをマージ条件で保証するため。そのため Branch protection で「必須チェックの通過」と「マージ前にブランチを最新化（Require branches to be up to date）」を有効にする。この設定は GitHub 側の設定であり、`CONTRIBUTING.md` で手順化する（`project-structure.md` 9.5）。
+- **auth.md 13章「CI での実行必須化の要否」の回答**：Vitest の全 projects（API 統合・所有者チェック横断を含む）は **PR・main とも必須**（失敗したらマージ・デプロイさせない）。E2E も **PR の必須チェック**とする（通らなければマージ＝デプロイができない）。gitleaks ジョブも必須チェックに含める（gitleaks の失敗で検査ジョブ・E2E ジョブがスキップされると、スキップは成功扱いになりマージを止めないため。`project-structure.md` 9.5）。`main` マージ時に再実行しないのは、PR の最新コミットで通過済みであることをマージ条件で保証するため。そのため Branch protection で「必須チェックの通過」と「マージ前にブランチを最新化（Require branches to be up to date）」を有効にする。この設定は GitHub 側の設定であり、`CONTRIBUTING.md` で手順化する（`project-structure.md` 9.5）。
 - 所有者チェック横断テスト（5.6）は Vitest の `api` プロジェクトに含まれるため、**特別な扱いなく必須チェックに入る**。
 - テスト用のシークレットは使わない（8章）。CI に新たな Secrets は追加しない。
 
