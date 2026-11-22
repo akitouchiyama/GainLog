@@ -61,11 +61,13 @@ jobs:
       - run: pnpm typecheck
       # カバレッジは計測のみで閾値は置かない（test.md 10.3）。要約をジョブサマリーに出す
       - name: テスト（全 projects・カバレッジ計測）
+        id: test
         shell: bash # pipefail を有効にして、テスト失敗が tee に隠れないようにする
         run: |
           pnpm test:coverage --coverage.reporter=text --coverage.reporter=text-summary | tee "$RUNNER_TEMP/test.log"
       - name: カバレッジの要約をジョブサマリーへ
-        if: always()
+        # テストが失敗しても要約は出す。手前の lint 等で止まりテストが実行されなかったときは出さない
+        if: always() && steps.test.outcome != 'skipped'
         run: |
           {
             echo '### カバレッジ（計測のみ・閾値なし）'
