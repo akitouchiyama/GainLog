@@ -533,7 +533,7 @@ Git 純正の pre-commit の一部として、LLM を呼ばないルールベー
   - `check` と `e2e` で共通の手順（Node・corepack・pnpm store のキャッシュ・`pnpm install --frozen-lockfile`）は、ローカルの composite action `.github/actions/setup` にまとめる。
   - `check` の中身：`pnpm lint` → `pnpm format:check` → `pnpm typecheck` → `pnpm test:coverage`（要約をジョブサマリーに出す。閾値なし。`test.md` 10.3）→ `pnpm build`。`format:check` は pre-commit の Prettier が staged のみを対象にする見逃しを全件で拾う。
   - `e2e` はブラウザ（`~/.cache/ms-playwright`）を `@playwright/test` の版をキーにキャッシュする。キャッシュがあっても OS の依存は毎回 `playwright install-deps` で入れる。失敗時はレポートをアーティファクトとして保存する。
-  - 使う Action は GitHub 公式（`actions/checkout`・`setup-node`・`cache`・`upload-artifact`）のみで、メジャー版のタグで指定する。pnpm は corepack、gitleaks は公式リリースのバイナリを checksum 検証して導入する。
+  - 使う Action は GitHub 公式（`actions/checkout`・`setup-node`・`cache`・`upload-artifact`）のみで、メジャー版のタグで指定する。`actions/checkout` は `persist-credentials: false` とし、PR のコードを実行する前に Git の認証情報を残さない（checkout の後に認証付きの Git 操作はしない）。pnpm は corepack、gitleaks は公式リリースのバイナリを checksum 検証して導入する。
   - 実測（初回・再実行）：`gitleaks` 6 秒、`check` 24〜30 秒、`container-build` 27〜30 秒、`e2e` 35〜47 秒（ブラウザのキャッシュあり 35 秒）。PR 全体の待ち時間は約 1 分。
   - gitleaks が検知すると後続の 3 ジョブがスキップされることを、使い捨ての PR（偽のトークンを含む）で確認した。GitHub はスキップされたジョブを成功として扱い、必須チェックでもマージを止めない。そのため `check`・`e2e` だけを必須にすると、gitleaks の失敗時にマージできてしまう。これを防ぐため `gitleaks` 自体も必須チェックにする。
 - **main**: テスト → ビルド → マイグレーション適用 → `wrangler deploy`（6.2）。**このワークフローは未実装**で、実装が終わって初回デプロイ（ローカルからの手動 `wrangler deploy`。`architecture.md` 6章）を済ませた後、結合テストの前に追加する（#27）。本番 D1 の作成・初回 migration の適用・シークレット設定は初回デプロイの作業で先に行い、CD では Cloudflare API token と `CLOUDFLARE_ACCOUNT_ID` の登録と workflow の作成を行う。初回の migration の手動適用は `architecture.md` 7章の「手動適用は行わない」の例外になり、初回デプロイの作業で同章に明記する。テストが失敗した場合はデプロイを中断する。`wrangler deploy` が失敗した場合は、マイグレーションを再適用せずデプロイのみを再試行する（ADR-0004）。

@@ -20,6 +20,7 @@ env:
   # ローカル（pre-commit）と同じ版にそろえる
   GITLEAKS_VERSION: 8.30.1
 
+# checkout は認証情報を残さない（persist-credentials: false）。checkout の後に認証付きの Git 操作をしないため
 jobs:
   gitleaks:
     runs-on: ubuntu-24.04
@@ -29,6 +30,7 @@ jobs:
         with:
           # PR のコミット範囲を検査するため、履歴を全件取得する
           fetch-depth: 0
+          persist-credentials: false
       # gitleaks-action は Organization のリポジトリでライセンスキーを要するため使わず、バイナリを直接実行する
       - name: gitleaks を導入
         run: |
@@ -51,6 +53,8 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
       - uses: ./.github/actions/setup
       - run: pnpm lint
       - run: pnpm format:check
@@ -77,6 +81,8 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
       # ビルドのみ。起動・動作確認は行わない（project-structure.md 6.4・9.5）
       - run: podman build -f Containerfile -t gainlog:ci .
 
@@ -86,6 +92,8 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
       - uses: ./.github/actions/setup
       - name: Playwright の版を取得
         id: playwright
